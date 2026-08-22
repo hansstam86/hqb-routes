@@ -33,6 +33,7 @@ const style = {
     vias: { type: 'geojson', data: EMPTY },
     customs: { type: 'geojson', data: EMPTY },
     transit: geo('transit'),
+    entrances: { type: 'geojson', data: EMPTY },
   },
   layers: [
     { id: 'bg', type: 'background', paint: { 'background-color': '#f1efe9' } },
@@ -62,14 +63,57 @@ const style = {
       layout: { 'line-cap': 'round' },
       paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 16 } },
 
+    // Each metro line in its own colour, dashed because it runs underneath you.
     { id: 'rail', type: 'line', source: 'rail',
-      paint: { 'line-color': '#b6afa3', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1, 18, 3], 'line-dasharray': [3, 2] } },
+      layout: { 'line-cap': 'butt', 'line-join': 'round' },
+      paint: {
+        'line-color': ['coalesce', ['get', 'colour'], '#b6afa3'],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1.4, 18, 4.5],
+        'line-opacity': 0.55,
+        'line-dasharray': [3, 2.2],
+      } },
+
+    // Station footprints outlined in the colours of the lines that serve them:
+    // one band per line, so an interchange reads as an interchange.
+    { id: 'station-fill', type: 'fill', source: 'buildings',
+      filter: ['==', ['get', 'station'], 1],
+      paint: { 'fill-color': ['coalesce', ['get', 'c1'], '#8a8f98'], 'fill-opacity': 0.12 } },
+    { id: 'station-edge-1', type: 'line', source: 'buildings',
+      filter: ['==', ['get', 'station'], 1],
+      paint: { 'line-color': ['coalesce', ['get', 'c1'], '#8a8f98'], 'line-width': 2.2 } },
+    { id: 'station-edge-2', type: 'line', source: 'buildings',
+      filter: ['all', ['==', ['get', 'station'], 1], ['has', 'c2']],
+      paint: { 'line-color': ['get', 'c2'], 'line-width': 2.2, 'line-offset': 2.6 } },
+    { id: 'station-edge-3', type: 'line', source: 'buildings',
+      filter: ['all', ['==', ['get', 'station'], 1], ['has', 'c3']],
+      paint: { 'line-color': ['get', 'c3'], 'line-width': 2.2, 'line-offset': 5.2 } },
+
+    { id: 'bldg-entrance-dot', type: 'circle', source: 'entrances', minzoom: 15.5,
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 15.5, 5, 19, 9.5],
+        'circle-color': '#3f4a5a', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.6,
+      } },
+    { id: 'bldg-entrance-ref', type: 'symbol', source: 'entrances', minzoom: 16,
+      layout: {
+        'text-field': ['get', 'ref'], 'text-font': ['Noto Sans Bold'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 16, 8, 19, 10.5],
+        'text-allow-overlap': true, 'text-ignore-placement': true,
+      },
+      paint: { 'text-color': '#ffffff' } },
+    { id: 'bldg-entrance-label', type: 'symbol', source: 'entrances', minzoom: 17,
+      filter: ['has', 'label'],
+      layout: {
+        'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'], 'text-size': 10.5,
+        'text-offset': [0, 1], 'text-anchor': 'top', 'text-max-width': 8, 'text-padding': 3,
+      },
+      paint: { 'text-color': '#3f4a5a', 'text-halo-color': '#f1efe9', 'text-halo-width': 1.6 } },
 
     { id: 'exit-dot', type: 'circle', source: 'transit', minzoom: 15.5,
       filter: ['==', ['get', 'kind'], 'exit'],
       paint: {
         'circle-radius': ['interpolate', ['linear'], ['zoom'], 15.5, 5.5, 19, 10],
-        'circle-color': '#1c7a4a', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.6,
+        'circle-color': ['coalesce', ['get', 'colour'], '#1c7a4a'],
+        'circle-stroke-color': '#fff', 'circle-stroke-width': 1.6,
       } },
     { id: 'exit-label', type: 'symbol', source: 'transit', minzoom: 16,
       filter: ['==', ['get', 'kind'], 'exit'],
@@ -582,13 +626,13 @@ function renderRouteExit() {
   const already = /exit/i.test(first.name || '') || /出口/.test(first.zh || '');
   if (already) { box.hidden = true; return; }
   box.hidden = false;
-  box.innerHTML = `<span class="exitline"><i>M</i> Start from ${esc(x.station)} exit <b>${esc(x.ref)}</b>`
+  box.innerHTML = `<span class="exitline"><i>M</i> Start from <b>${esc(exitLabel(x))}</b>`
     + ` · ${fmtDist(x.metres)} to stop 1</span>`
     + (canBuild ? '<button class="ghost" id="useExit">Add as first stop</button>' : '');
   const btn = $('#useExit');
   if (btn) btn.onclick = () => {
     r.stops.unshift({
-      id: uid(), name: `${x.station} exit ${x.ref}`, zh: `${x.station}站 ${x.ref}出口`,
+      id: uid(), name: exitLabel(x), zh: exitLabelZh(x),
       note: '', mins: 0, lng: x.at[0], lat: x.at[1], via: [],
     });
     if (r.stops[1]) r.stops[1].via = [];
@@ -726,6 +770,19 @@ function setAddMode(on) {
 }
 
 map.on('click', (e) => {
+  if (placingFor && canBuild) {
+    const b = (buildings[placingFor] ??= { floors: [] });
+    b.entrances ??= [];
+    b.entrances.push({
+      id: uid().slice(0, 8), ref: String(b.entrances.length + 1), en: '', zh: '',
+      at: [+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)],
+    });
+    placingFor = null;
+    $('#hint').textContent = '';
+    map.getCanvas().style.cursor = '';
+    touchBuildings(true);
+    return;
+  }
   if (renameMode && canBuild) {
     const mine = pickCustom(e.point);
     if (mine) return openCustom(mine);
@@ -736,9 +793,10 @@ map.on('click', (e) => {
   if (!addMode) {
     const hit = pickFeature(e.point);
     if (hit && (hit.key === 'buildings' || hit.key === 'pois')) {
+      // Don't create an entry just for looking: an empty one would be published.
       const oid = hit.props.oid;
-      if (canBuild) { buildings[oid] ??= { floors: [] }; }
-      if (canBuild || buildings[oid]?.floors?.length) return selectBuilding(oid);
+      const b = buildings[oid];
+      if (canBuild || b?.floors?.length || b?.entrances?.length) return selectBuilding(oid);
     }
     return;
   }
@@ -752,8 +810,8 @@ map.on('click', (e) => {
         { layers: ['exit-dot'] })[0] : null;
   const hit = pickFeature(e.point);
   const o = hit ? places[hit.props.oid] : null;
-  const zh = ex ? `${ex.properties.station}站 ${ex.properties.ref}出口` : (o?.zh || hit?.props?.zh || '');
-  const en = ex ? `${ex.properties.station} exit ${ex.properties.ref}` : (o?.en || hit?.props?.en || '');
+  const zh = ex ? exitLabelZh(ex.properties) : (o?.zh || hit?.props?.zh || '');
+  const en = ex ? exitLabel(ex.properties) : (o?.en || hit?.props?.en || '');
   r.stops.push({
     id: uid(), name: en || zh || '', zh, note: '', mins: ex ? 0 : 10,
     lng: +e.lngLat.lng.toFixed(6), lat: +e.lngLat.lat.toFixed(6), via: [],
@@ -909,6 +967,32 @@ $('#rename').addEventListener('close', () => {
   toast(`${msg} — publish to share it`);
 });
 
+/* Drag an entrance onto the actual door. */
+let dragEnt = null;
+map.on('mousedown', 'bldg-entrance-dot', (e) => {
+  if (!canBuild || addMode || renameMode || placingFor) return;
+  e.preventDefault();
+  const p = e.features[0].properties;
+  dragEnt = { oid: p.oid, id: p.id };
+  map.getCanvas().style.cursor = 'grabbing';
+});
+map.on('mousemove', (e) => {
+  if (!dragEnt) return;
+  const en = buildings[dragEnt.oid]?.entrances?.find((x) => x.id === dragEnt.id);
+  if (en) { en.at = [+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)]; drawEntrances(); }
+});
+document.addEventListener('mouseup', () => {
+  if (!dragEnt) return;
+  dragEnt = null;
+  map.getCanvas().style.cursor = '';
+  saveDraft(); refreshPublish();
+});
+map.on('click', 'bldg-entrance-dot', (e) => {
+  if (placingFor) return;
+  const oid = e.features[0].properties.oid;
+  if (buildings[oid]) selectBuilding(oid);
+});
+
 /* Drag one of your own names to reposition it. */
 let dragName = null;
 map.on('mousedown', 'custom-anchor', (e) => {
@@ -983,6 +1067,24 @@ async function loadTransit() {
   });
 }
 
+/* Ways into the big blocks. OpenStreetMap has three entrance nodes in the whole
+   district, all unnamed, so these are yours to place. */
+function drawEntrances() {
+  const features = [];
+  for (const [oid, b] of Object.entries(buildings)) {
+    for (const en of b?.entrances ?? []) {
+      if (!Array.isArray(en.at)) continue;
+      const label = pickName(en.zh, en.en);
+      features.push({
+        type: 'Feature',
+        properties: { oid, id: en.id, ref: en.ref || '·', ...(label ? { label } : {}) },
+        geometry: { type: 'Point', coordinates: en.at },
+      });
+    }
+  }
+  map.getSource('entrances')?.setData({ type: 'FeatureCollection', features });
+}
+
 /* Nearest exit by walking distance. One search ranks every exit at once. */
 function nearestExit(at, cacheKey) {
   if (cacheKey && nearestCache.has(cacheKey)) return nearestCache.get(cacheKey);
@@ -1003,8 +1105,10 @@ function nearestExit(at, cacheKey) {
   return out;
 }
 
+const exitLabel = (x) => (x.station ? `${x.station} exit ${x.ref}` : `metro entrance ${x.ref}`);
+const exitLabelZh = (x) => (x.station ? `${x.station}站 ${x.ref}出口` : `地铁 ${x.ref}号出入口`);
 const exitLine = (x) => x
-  ? `<span class="exitline"><i>M</i> ${esc(x.station)} exit <b>${esc(x.ref)}</b> · ${fmtDist(x.metres)} walk</span>`
+  ? `<span class="exitline"><i>M</i> ${esc(exitLabel(x))} · ${fmtDist(x.metres)} walk</span>`
   : '';
 
 /* ---------------------------------------------------------------- buildings
@@ -1036,6 +1140,7 @@ function normalizeBuildings() {
       f.id ??= uid().slice(0, 8);
       f.booths ??= [];
     }
+    for (const en of b?.entrances ?? []) en.id ??= uid().slice(0, 8);
   }
 }
 
@@ -1111,7 +1216,8 @@ function renderSearch(el, q) {
 }
 
 function renderIndex(el) {
-  const keys = Object.keys(buildings).filter((k) => buildings[k]?.floors?.length);
+  const keys = Object.keys(buildings)
+    .filter((k) => buildings[k]?.floors?.length || buildings[k]?.entrances?.length);
   $('#bHint').textContent = keys.length ? `${keys.length} building(s) mapped` : '';
   if (!keys.length) {
     el.innerHTML = `<p class="bempty">${canBuild
@@ -1122,11 +1228,13 @@ function renderIndex(el) {
   const list = document.createElement('div');
   list.className = 'blist';
   for (const oid of keys.sort((a, b) => nameOf(a).localeCompare(nameOf(b)))) {
-    const floors = buildings[oid].floors;
+    const floors = buildings[oid].floors ?? [];
     const booths = floors.reduce((a, f) => a + (f.booths?.length ?? 0), 0);
+    const ents = buildings[oid].entrances?.length ?? 0;
+    const bits = [floors.length ? `${floors.length} floors` : '', booths ? `${booths} booths` : '',
+      ents ? `${ents} ways in` : ''].filter(Boolean).join(' · ');
     const btn = document.createElement('button');
-    btn.innerHTML = `<span class="bn">${esc(nameOf(oid))}</span>`
-      + `<span class="bf">${floors.length} floors${booths ? ` · ${booths} booths` : ''}</span>`;
+    btn.innerHTML = `<span class="bn">${esc(nameOf(oid))}</span><span class="bf">${bits}</span>`;
     btn.onclick = () => selectBuilding(oid);
     list.append(btn);
   }
@@ -1151,6 +1259,30 @@ function renderBuilding(el, oid) {
   }
 
   for (const f of floors) el.append(...floorNodes(oid, f));
+
+  const ents = buildings[oid]?.entrances ?? [];
+  if (ents.length || canBuild) {
+    const h = document.createElement('div');
+    h.className = 'enthead';
+    h.textContent = 'Ways in';
+    el.append(h);
+  }
+  for (const en of ents) el.append(entranceRow(oid, en));
+  if (canBuild) {
+    const addRow = document.createElement('div');
+    addRow.className = 'baddrow';
+    addRow.innerHTML = `<button class="ghost" id="bAddEnt">${placingFor === oid
+      ? 'Click the map to place it…' : '+ Add entrance'}</button>`;
+    el.append(addRow);
+    addRow.querySelector('#bAddEnt').onclick = () => {
+      placingFor = placingFor === oid ? null : oid;
+      setAddMode(false);
+      setRenameMode(false);
+      $('#hint').textContent = placingFor ? 'Click the map to place the entrance' : '';
+      map.getCanvas().style.cursor = placingFor ? 'crosshair' : '';
+      renderBuildings();
+    };
+  }
 
   const foot = document.createElement('div');
   foot.className = 'baddrow';
@@ -1261,13 +1393,52 @@ function floorNodes(oid, f) {
   return nodes;
 }
 
+let placingFor = null;      // oid awaiting a click to place an entrance
+
+function entranceRow(oid, en) {
+  const row = document.createElement('div');
+  row.className = 'entrance';
+  if (canBuild) {
+    row.innerHTML = `
+      <input class="eref" value="${esc(en.ref)}" placeholder="N" autocomplete="off" title="Short label shown on the map" />
+      <div>
+        <input class="een" value="${esc(en.en)}" placeholder="North entrance" autocomplete="off" />
+        <input class="ezh" value="${esc(en.zh)}" placeholder="北门" autocomplete="off" />
+      </div>
+      <div class="fmeta">
+        <button class="goto" title="Show on map">◎</button>
+        <button class="x" title="Remove entrance">×</button>
+      </div>`;
+    row.querySelector('.eref').oninput = (e) => { en.ref = e.target.value; touchBuildings(false); };
+    row.querySelector('.een').oninput = (e) => { en.en = e.target.value; touchBuildings(false); };
+    row.querySelector('.ezh').oninput = (e) => { en.zh = e.target.value; touchBuildings(false); };
+    row.querySelector('.x').onclick = () => {
+      buildings[oid].entrances = buildings[oid].entrances.filter((x) => x !== en);
+      touchBuildings(true);
+    };
+  } else {
+    row.innerHTML = `
+      <div class="eref-ro">${esc(en.ref) || '·'}</div>
+      <div>
+        <div class="ro-en">${esc(pickName(en.zh, en.en)) || 'Entrance'}</div>
+        ${(lang === 'zh' ? en.en : en.zh) ? `<div class="ro-zh">${esc(lang === 'zh' ? en.en : en.zh)}</div>` : ''}
+      </div>
+      <div class="fmeta"><button class="goto" title="Show on map">◎</button></div>`;
+  }
+  row.querySelector('.goto').onclick = () =>
+    map.flyTo({ center: en.at, zoom: Math.max(map.getZoom(), 18) });
+  return row;
+}
+
 /* Re-render only when the shape changed; typing shouldn't steal focus. */
 function touchBuildings(rerender) {
   const oid = bSelected;
-  if (oid && !buildings[oid]?.floors?.length) delete buildings[oid];
+  const b = buildings[oid];
+  if (oid && b && !b.floors?.length && !b.entrances?.length) delete buildings[oid];
   saveDraft();
   refreshPublish();
   applyLabels();
+  drawEntrances();
   if (rerender) renderBuildings();
 }
 
@@ -1429,6 +1600,7 @@ map.on('load', async () => {
 
   await loadBasemap();
   await loadTransit();
+  drawEntrances();
 
   const hash = location.hash.match(/^#r=(.+)$/);
   if (hash) {

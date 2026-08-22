@@ -329,3 +329,27 @@ body.can-build .tool#renameMode { display: inline-block !important; }
 }
 .routeexit button { margin-left: auto; }
 .bcard .exitline { margin-top: 2px; }
+
+/* ---------- building entrances ---------- */
+.enthead {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 12px 0 6px;
+}
+.entrance {
+  display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; align-items: start;
+  padding: 7px 8px; margin-bottom: 5px; border: 1px solid var(--line); border-radius: 9px; background: #fff;
+}
+.entrance .eref, .entrance .eref-ro {
+  font-weight: 700; font-size: 11.5px; text-align: center; padding: 4px 2px;
+  background: #e7eaee; color: #3f4a5a; border-radius: 6px; border: 0; width: 100%;
+}
+.entrance input { width: 100%; font: inherit; border: 0; padding: 1px 0; background: none; color: var(--ink); }
+.entrance .een { font-weight: 600; font-size: 13px; }
+.entrance .ezh { font-size: 12px; color: var(--muted); }
+.entrance .ro-en { font-weight: 600; font-size: 13px; }
+.entrance .ro-zh { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.entrance .goto, .entrance .x {
+  border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 13px; padding: 0 3px;
+}
+.entrance .goto:hover { color: #3f4a5a; }
+.entrance .x:hover { color: var(--accent); }

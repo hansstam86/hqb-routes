@@ -98,10 +98,25 @@ Getting around Huaqiangbei starts at a metro exit, so the map treats them as fir
 `E2`. There are 57 of them in the district; 华强北 alone has 18. OpenStreetMap had this all
 along and the map was throwing it away.
 
-**Stations** show the lines that serve them as coloured badges — 华强北 as 2·7·8, 华强路 as
-1 — in the official Shenzhen Metro colours. Neither fact is tagged directly in OSM: line
-colours come from the route relations, and which line stops where is derived at build time by
-matching each line's stop-positions to the station beside it.
+**Lines** are drawn in their own colours — Line 1 green, Line 2 orange, Line 7 blue — dashed,
+because they run underneath you.
+
+**Stations** are outlined in the colours of the lines that serve them, one band per line, so
+an interchange reads as an interchange: 华强路站 is plain green because only Line 1 stops
+there, while 华强北站 carries an orange band and a blue one. They also show line badges.
+
+None of this is tagged usably in OSM. Line colours come from the route relations; which line
+stops where is derived at build time by matching each line's stop-positions to the station
+beside it; and station *areas* (`building=train_station`) carry no line reference at all, so
+they're matched back by name.
+
+**Exit attribution is a derivation, not a fact.** Lettered exits sit 37–214 m from their
+station and clearly belong to it. But 17 entrances along 华强北路 are tagged with nothing but
+a number, run 135–305 m from the nearest station, and form one continuous series between 华新
+and 华强北 — most likely entrances to the underground shopping street rather than either
+station. Guessing would put a wrong line colour on the map, so those stay neutral green and
+unattributed, labelled `metro entrance 7`. If you know which they belong to, say so and I'll
+fix them.
 
 **Nearest exit** is computed along the walking network, not as the crow flies, and shown on
 every building directory and above every route:
@@ -133,6 +148,16 @@ Click any building on the map with no tool active and it opens there. Add floors
 level (`B1`, `1F`, `3F`), what's sold on it, and the Chinese for the same. Floors sort the way
 you'd walk them — B2, B1, 1F, 2F — regardless of the order you type them in. Buildings with a
 directory are tinted **gold** on the map, so you can see at a glance which ones you've done.
+
+### Ways in
+
+OpenStreetMap has **three** entrance nodes in the whole of Huaqiangbei, all unnamed — useless
+for blocks like 赛格, SEGCOM or the AVIC Center. So entrances are yours to place.
+
+With a building open, **+ Add entrance** then click the map. Each gets a short label drawn on
+the map (`N`, `1`, `西`) plus a full name in both scripts. Drag one to nudge it onto the
+actual door. They render as slate pills — deliberately the same shape as the green metro
+exits, since they do the same job — and visitors see them too.
 
 ### Booths
 
