@@ -90,6 +90,40 @@ keeps them attached — unless OSM replaces the feature, in which case the overr
 orphaned and the OSM label returns. Names you added yourself carry their own coordinates and
 are unaffected.
 
+## Metro
+
+Getting around Huaqiangbei starts at a metro exit, so the map treats them as first-class.
+
+**Exits** are drawn as green pills with the letter people actually navigate by — `A`, `D1`,
+`E2`. There are 57 of them in the district; 华强北 alone has 18. OpenStreetMap had this all
+along and the map was throwing it away.
+
+**Stations** show the lines that serve them as coloured badges — 华强北 as 2·7·8, 华强路 as
+1 — in the official Shenzhen Metro colours. Neither fact is tagged directly in OSM: line
+colours come from the route relations, and which line stops where is derived at build time by
+matching each line's stop-positions to the station beside it.
+
+**Nearest exit** is computed along the walking network, not as the crow flies, and shown on
+every building directory and above every route:
+
+```
+SEG Plaza 赛格广场      华强北 exit D1 · 229 m walk
+```
+
+A route also offers **Add as first stop**, which prepends that exit with a zero-minute dwell —
+most trips here begin by coming up some steps. Dropping a stop directly on an exit names it
+`华强北 exit D1` / `华强北站 D1出口` automatically.
+
+Ranking 57 exits is a single search, not 57: the router does one Dijkstra from the
+destination and reads every exit's cost off the result, which takes about 3 ms.
+
+### What this still can't do
+
+Tencent and Amap model the *inside* of these stations — concourse layouts, transfer passages,
+which underground exit connects to which mall basement. OpenStreetMap has essentially no
+indoor mapping in Huaqiangbei, so neither do we. If that matters, it has to be surveyed by
+hand into the building directories.
+
 ## What's sold where
 
 Huaqiangbei is vertical: which floor a thing is on matters more than which street. The
@@ -197,6 +231,7 @@ scripts/serve.mjs      dev-only static server
 data/hqb.osm.json      raw download (24 MB, gitignored)
 site/                  ← the deployable site
   data/                basemap layers + walkgraph.json
+  data/transit.geojson metro exits (with letters) and stations (with lines/colours)
   data/routes.json     the published routes (public read, author-only write)
   data/places.json     your names: overrides, hidden labels, and ones you added
   data/buildings.json  floor-by-floor directories of what's sold where

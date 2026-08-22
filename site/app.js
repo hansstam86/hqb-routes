@@ -32,6 +32,7 @@ const style = {
     route: { type: 'geojson', data: EMPTY },
     vias: { type: 'geojson', data: EMPTY },
     customs: { type: 'geojson', data: EMPTY },
+    transit: geo('transit'),
   },
   layers: [
     { id: 'bg', type: 'background', paint: { 'background-color': '#f1efe9' } },
@@ -64,7 +65,23 @@ const style = {
     { id: 'rail', type: 'line', source: 'rail',
       paint: { 'line-color': '#b6afa3', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1, 18, 3], 'line-dasharray': [3, 2] } },
 
+    { id: 'exit-dot', type: 'circle', source: 'transit', minzoom: 15.5,
+      filter: ['==', ['get', 'kind'], 'exit'],
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 15.5, 5.5, 19, 10],
+        'circle-color': '#1c7a4a', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.6,
+      } },
+    { id: 'exit-label', type: 'symbol', source: 'transit', minzoom: 16,
+      filter: ['==', ['get', 'kind'], 'exit'],
+      layout: {
+        'text-field': ['get', 'ref'], 'text-font': ['Noto Sans Bold'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 16, 8, 19, 11],
+        'text-allow-overlap': true, 'text-ignore-placement': true,
+      },
+      paint: { 'text-color': '#ffffff' } },
+
     { id: 'poi', type: 'circle', source: 'pois', minzoom: 15,
+      filter: ['!', ['in', ['get', 'cls'], ['literal', ['exit', 'station']]]],
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 15, 1.8, 18, 3.4],
         'circle-color': '#a89e8e', 'circle-opacity': .8 } },
     { id: 'road-label', type: 'symbol', source: 'roads', minzoom: 15,
@@ -85,14 +102,14 @@ const style = {
         'text-halo-color': '#f1efe9', 'text-halo-width': 1.5 } },
 
     { id: 'poi-label', type: 'symbol', source: 'pois', minzoom: 16,
-      filter: ['all', ['has', 'label'], ['!', ['in', ['get', 'cls'], ['literal', ['exit']]]]],
+      filter: ['all', ['has', 'label'], ['!', ['in', ['get', 'cls'], ['literal', ['exit', 'station']]]]],
       layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 19, 12.5],
         'text-offset': [0, .9], 'text-anchor': 'top', 'text-max-width': 7, 'text-padding': 3 },
       paint: { 'text-color': ['case', ['==', ['get', 'custom'], 2], '#b0a89a', ['==', ['get', 'custom'], 1], '#b45309', '#5f5748'],
         'text-halo-color': '#f6f5f2', 'text-halo-width': 1.4 } },
     { id: 'mall-label', type: 'symbol', source: 'pois', minzoom: 14,
-      filter: ['all', ['has', 'label'], ['in', ['get', 'cls'], ['literal', ['mall', 'station', 'electronics']]]],
+      filter: ['all', ['has', 'label'], ['in', ['get', 'cls'], ['literal', ['mall', 'electronics']]]],
       layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 14, 11, 19, 14.5], 'text-max-width': 8, 'text-padding': 4 },
       paint: { 'text-color': ['case', ['==', ['get', 'custom'], 2], '#b0a89a', ['==', ['get', 'custom'], 1], '#b45309', '#4c4438'],
@@ -554,9 +571,35 @@ if (true) {
 
 /* ---------------------------------------------------------------- stops UI */
 
+function renderRouteExit() {
+  const box = $('#routeExit');
+  const r = active();
+  const first = r?.stops?.[0];
+  if (!first) { box.hidden = true; return; }
+  const x = nearestExit([first.lng, first.lat], `s:${first.id}`);
+  if (!x) { box.hidden = true; return; }
+  // Once stop 1 is itself an exit, saying "start from an exit" is just noise.
+  const already = /exit/i.test(first.name || '') || /出口/.test(first.zh || '');
+  if (already) { box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = `<span class="exitline"><i>M</i> Start from ${esc(x.station)} exit <b>${esc(x.ref)}</b>`
+    + ` · ${fmtDist(x.metres)} to stop 1</span>`
+    + (canBuild ? '<button class="ghost" id="useExit">Add as first stop</button>' : '');
+  const btn = $('#useExit');
+  if (btn) btn.onclick = () => {
+    r.stops.unshift({
+      id: uid(), name: `${x.station} exit ${x.ref}`, zh: `${x.station}站 ${x.ref}出口`,
+      note: '', mins: 0, lng: x.at[0], lat: x.at[1], via: [],
+    });
+    if (r.stops[1]) r.stops[1].via = [];
+    commit();
+  };
+}
+
 function renderStops() {
   const r = active();
   const el = $('#stops');
+  renderRouteExit();
   el.innerHTML = '';
   const has = !!(r && r.stops.length);
   $('#empty').hidden = has;
@@ -703,12 +746,16 @@ map.on('click', (e) => {
   const r = active() ?? newRoute();
   // Take both scripts from the place you clicked, so the stop can be shown to a
   // local in Chinese even if you filed it under an English name.
+  // An exit under the cursor wins: it is the most specific thing you can name.
+  const ex = map.getLayer('exit-dot')
+    ? map.queryRenderedFeatures([[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]],
+        { layers: ['exit-dot'] })[0] : null;
   const hit = pickFeature(e.point);
   const o = hit ? places[hit.props.oid] : null;
-  const zh = o?.zh || hit?.props?.zh || '';
-  const en = o?.en || hit?.props?.en || '';
+  const zh = ex ? `${ex.properties.station}站 ${ex.properties.ref}出口` : (o?.zh || hit?.props?.zh || '');
+  const en = ex ? `${ex.properties.station} exit ${ex.properties.ref}` : (o?.en || hit?.props?.en || '');
   r.stops.push({
-    id: uid(), name: en || zh || '', zh, note: '', mins: 10,
+    id: uid(), name: en || zh || '', zh, note: '', mins: ex ? 0 : 10,
     lng: +e.lngLat.lng.toFixed(6), lat: +e.lngLat.lat.toFixed(6), via: [],
   });
   renderRouteBar();
@@ -890,8 +937,75 @@ $('#lang').onclick = () => {
   lang = lang === 'zh' ? 'en' : 'zh';
   localStorage.setItem(LANG_KEY, lang);
   applyLabels();
+  loadTransit();
   renderStops();
+  if (!$('.panel > .tab[data-tab=buildings]').hidden) renderBuildings();
 };
+
+/* ---------------------------------------------------------------- transit
+
+   Which exit to come out of is the thing people actually need in Shenzhen, so
+   exits are drawn with their letters and every destination gets the nearest one
+   measured along the walking network, not as the crow flies. */
+
+let exitIdx = [];              // { props, at, node } for every exit
+let stationMarkers = [];
+const nearestCache = new Map();
+
+async function loadTransit() {
+  let fc;
+  try { fc = await (await fetch('./data/transit.geojson')).json(); }
+  catch (err) { return console.warn('transit failed', err); }
+
+  const stations = fc.features.filter((f) => f.properties.kind === 'station');
+  const exits = fc.features.filter((f) => f.properties.kind === 'exit');
+
+  if (router) {
+    exitIdx = exits.map((f) => ({
+      props: f.properties, at: f.geometry.coordinates,
+      node: router.snap(f.geometry.coordinates[0], f.geometry.coordinates[1]),
+    })).filter((e) => e.node >= 0);
+  }
+
+  for (const m of stationMarkers) m.remove();
+  stationMarkers = stations.map((f) => {
+    const p = f.properties;
+    const el = document.createElement('div');
+    el.className = 'station-mk';
+    const lines = (p.lines || '').split(',').filter(Boolean);
+    const cols = (p.colours || '').split(',');
+    el.innerHTML = `<div class="lines">${lines
+      .map((l, i) => `<i style="background:${esc(cols[i] || '#666')}">${esc(l)}</i>`).join('')}</div>`
+      + `<div class="sname">${esc(pickName(p.zh, p.en) || p.name)}</div>`;
+    el.title = `${p.name} · ${lines.length ? `line ${lines.join(', ')}` : 'metro'}`;
+    return new maplibregl.Marker({ element: el, anchor: 'top' })
+      .setLngLat(f.geometry.coordinates).addTo(map);
+  });
+}
+
+/* Nearest exit by walking distance. One search ranks every exit at once. */
+function nearestExit(at, cacheKey) {
+  if (cacheKey && nearestCache.has(cacheKey)) return nearestCache.get(cacheKey);
+  let out = null;
+  if (router && exitIdx.length) {
+    const costs = router.costsFrom(router.snap(at[0], at[1]));
+    let best = null, bd = Infinity;
+    for (const e of exitIdx) {
+      const c = costs[e.node];
+      if (c < bd) { bd = c; best = e; }
+    }
+    if (best && bd < Infinity) {
+      const leg = router.leg(best.at, at);
+      out = { ref: best.props.ref, station: best.props.station, metres: leg.metres, at: best.at };
+    }
+  }
+  if (cacheKey) nearestCache.set(cacheKey, out);
+  return out;
+}
+
+const exitLine = (x) => x
+  ? `<span class="exitline"><i>M</i> ${esc(x.station)} exit <b>${esc(x.ref)}</b> · ${fmtDist(x.metres)} walk</span>`
+  : '';
 
 /* ---------------------------------------------------------------- buildings
 
@@ -1023,7 +1137,8 @@ function renderBuilding(el, oid) {
   const other = otherNameOf(oid);
   const card = document.createElement('div');
   card.className = 'bcard';
-  card.innerHTML = `<h3>${esc(nameOf(oid))}</h3><div class="sub">${esc(other)}</div>`;
+  const x = nearestExit(featureIdx.get(oid)?.at ?? [0, 0], `b:${oid}`);
+  card.innerHTML = `<h3>${esc(nameOf(oid))}</h3><div class="sub">${esc(other)}</div>${exitLine(x)}`;
   el.append(card);
 
   const floors = sortedFloors(oid);
@@ -1313,6 +1428,7 @@ map.on('load', async () => {
   }
 
   await loadBasemap();
+  await loadTransit();
 
   const hash = location.hash.match(/^#r=(.+)$/);
   if (hash) {

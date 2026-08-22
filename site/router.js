@@ -110,6 +110,53 @@ export function createRouter(graph) {
 
   const coordOf = (i) => [xy[i * 2], xy[i * 2 + 1]];
 
+  /* Cost from one node to every other, in a single pass. Ranking 57 metro exits
+     by distance is one search this way instead of 57. */
+  function costsFrom(from) {
+    const distTo = new Float64Array(n).fill(Infinity);
+    const done = new Uint8Array(n);
+    if (from < 0) return distTo;
+    distTo[from] = 0;
+    const heap = [[0, from]];
+    const push = (item) => {
+      heap.push(item);
+      let i = heap.length - 1;
+      while (i > 0) {
+        const p = (i - 1) >> 1;
+        if (heap[p][0] <= heap[i][0]) break;
+        [heap[p], heap[i]] = [heap[i], heap[p]];
+        i = p;
+      }
+    };
+    const pop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        let i = 0;
+        for (;;) {
+          const l = i * 2 + 1, r = l + 1;
+          let sm = i;
+          if (l < heap.length && heap[l][0] < heap[sm][0]) sm = l;
+          if (r < heap.length && heap[r][0] < heap[sm][0]) sm = r;
+          if (sm === i) break;
+          [heap[sm], heap[i]] = [heap[i], heap[sm]];
+          i = sm;
+        }
+      }
+      return top;
+    };
+    while (heap.length) {
+      const [d, v] = pop();
+      if (done[v]) continue;
+      done[v] = 1;
+      for (const [w, len] of adj[v]) {
+        const nd = d + len;
+        if (nd < distTo[w]) { distTo[w] = nd; push([nd, w]); }
+      }
+    }
+    return distTo;
+  }
+
   /* A leg between two stops. Falls back to a straight line when the network
      can't connect them, and says so, rather than reporting a bogus distance. */
   function leg(a, b) {
@@ -129,5 +176,5 @@ export function createRouter(graph) {
     return { coords, metres: m, direct: false };
   }
 
-  return { snap, leg, size: n };
+  return { snap, leg, costsFrom, size: n };
 }

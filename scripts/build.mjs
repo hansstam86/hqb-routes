@@ -94,6 +94,105 @@ for (const [k, features] of Object.entries(layers)) {
   console.log(`  ${k.padEnd(10)} ${String(features.length).padStart(5)}  ${(fs.statSync(file).size / 1024).toFixed(0)} KB`);
 }
 
+/* ------------------------------------------------ 1b. transit
+
+   Exits carry the letter people actually navigate by ("come out exit D1"), and
+   stations carry the lines that serve them. Neither is tagged directly the way we
+   need it, so both are derived here rather than in the browser. */
+
+const M_LNG = 102800, M_LAT = 111000;
+const metres = (a, b) => Math.hypot((a[0] - b[0]) * M_LNG, (a[1] - b[1]) * M_LAT);
+
+// osmtogeojson mutates the element array it is handed, leaving duplicate node
+// entries behind, so index by id first and read everything back off that.
+const nodeById = new Map();
+for (const e of raw.elements) if (e.type === 'node' && !nodeById.has(e.id)) nodeById.set(e.id, e);
+const allNodes = [...nodeById.values()];
+const stationNodes = allNodes.filter((e) => e.tags && (e.tags.railway === 'station' || e.tags.station === 'subway'));
+const entrances = allNodes.filter((e) => e.tags && e.tags.railway === 'subway_entrance');
+const subwayRels = raw.elements.filter((e) => e.type === 'relation' && e.tags?.route === 'subway');
+
+// A line's "stop" members are bare positions on the track, so the only way to say
+// which line serves which station is to match each stop to the station beside it.
+const linesAt = new Map();          // station node id -> Set of line refs
+const lineColour = new Map();
+for (const r of subwayRels) {
+  const ref = r.tags.ref;
+  if (!ref) continue;
+  lineColour.set(ref, r.tags.colour || r.tags.color || '#666');
+  for (const mem of r.members ?? []) {
+    if (mem.role !== 'stop') continue;
+    const sp = nodeById.get(mem.ref);
+    if (!sp) continue;
+    let best = null, bd = 200;
+    for (const st of stationNodes) {
+      const d = metres([sp.lon, sp.lat], [st.lon, st.lat]);
+      if (d < bd) { bd = d; best = st; }
+    }
+    if (best) {
+      if (!linesAt.has(best.id)) linesAt.set(best.id, new Set());
+      linesAt.get(best.id).add(ref);
+    }
+  }
+}
+
+// One station is several OSM nodes (one per platform); collapse them by name.
+const stationGroups = new Map();
+for (const st of stationNodes) {
+  const key = (st.tags.name || '').replace(/[\u200e\u200f]/g, '').trim();
+  if (!key) continue;
+  if (!stationGroups.has(key)) stationGroups.set(key, []);
+  stationGroups.get(key).push(st);
+}
+
+const transit = [];
+const stationAt = [];               // for assigning exits to a station
+for (const [name, group] of stationGroups) {
+  const at = [
+    r6(group.reduce((a, n) => a + n.lon, 0) / group.length),
+    r6(group.reduce((a, n) => a + n.lat, 0) / group.length),
+  ];
+  const lines = [...new Set(group.flatMap((n) => [...(linesAt.get(n.id) ?? [])]))]
+    .sort((a, b) => Number(a) - Number(b));
+  const t = group[0].tags;
+  stationAt.push({ name, at });
+  transit.push({
+    type: 'Feature',
+    properties: {
+      oid: `node/${group[0].id}`, kind: 'station', name,
+      zh: t['name:zh'] || name, en: t['name:en'] || null,
+      lines: lines.join(','), colours: lines.map((l) => lineColour.get(l) || '#666').join(','),
+    },
+    geometry: { type: 'Point', coordinates: at },
+  });
+}
+
+for (const e of entrances) {
+  const at = [r6(e.lon), r6(e.lat)];
+  let station = null, bd = 600;
+  for (const s of stationAt) {
+    const d = metres(at, s.at);
+    if (d < bd) { bd = d; station = s.name; }
+  }
+  transit.push({
+    type: 'Feature',
+    properties: {
+      oid: `node/${e.id}`, kind: 'exit',
+      ref: (e.tags.ref || e.tags.name || '').trim() || '?',
+      station: station || '',
+    },
+    geometry: { type: 'Point', coordinates: at },
+  });
+}
+
+{
+  const file = path.join(OUT, 'transit.geojson');
+  fs.writeFileSync(file, JSON.stringify({ type: 'FeatureCollection', features: transit }));
+  const st = transit.filter((f) => f.properties.kind === 'station').length;
+  console.log(`  transit    ${String(transit.length).padStart(5)}  (${st} stations, ${transit.length - st} exits)  `
+    + `${(fs.statSync(file).size / 1024).toFixed(0)} KB`);
+}
+
 /* ------------------------------------------------ 2. walking graph */
 
 // Footways and small streets are the real walking network. Big roads are included
