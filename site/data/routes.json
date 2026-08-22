@@ -60,7 +60,58 @@
     "id": "8c01fe0b-b474-4492-97e1-764d55e88a78",
     "name": "Electronics Industry Exploration",
     "color": "#047857",
-    "stops": []
+    "stops": [
+      {
+        "id": "75034dc5-953b-4420-a803-047fc3b60e4a",
+        "name": "Global AI application Center",
+        "zh": "华强北路",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081632,
+        "lat": 22.547298,
+        "via": []
+      },
+      {
+        "id": "18d9d146-fd3f-4984-94e4-91da2b1362db",
+        "name": "Huaqiangbei museum",
+        "zh": "广博现代之窗大厦",
+        "note": "",
+        "mins": 10,
+        "lng": 114.082029,
+        "lat": 22.546738,
+        "via": []
+      },
+      {
+        "id": "eee36307-7afa-43ea-9944-4601c6551308",
+        "name": "Huaqiang Electronics World",
+        "zh": "华强广场",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081217,
+        "lat": 22.546194,
+        "via": []
+      },
+      {
+        "id": "52a47886-a198-4f33-912e-03bb9d09ddf0",
+        "name": "SEG Tower",
+        "zh": "赛格电子市场",
+        "note": "",
+        "mins": 10,
+        "lng": 114.082091,
+        "lat": 22.543945,
+        "via": []
+      },
+      {
+        "id": "658a19d0-c8ab-4920-b7a1-f600fc0c1ef4",
+        "name": "Black Ark",
+        "zh": "Building D, Dianzikeji Building",
+        "note": "",
+        "mins": 10,
+        "lng": 114.083057,
+        "lat": 22.544069,
+        "via": []
+      }
+    ]
   },
   {
     "id": "81ef1a67-bb90-4572-a178-07c35d2e20e2",
