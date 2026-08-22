@@ -1,6 +1,14 @@
 {
   "node/1694247944": {
-    "floors": [],
+    "floors": [
+      {
+        "id": "34f82528",
+        "level": "",
+        "en": "",
+        "zh": "",
+        "booths": []
+      }
+    ],
     "entrances": [
       {
         "id": "cfa31388",
