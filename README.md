@@ -20,18 +20,50 @@ Every stop has a name, a free-text note ("what to do here"), and a time in minut
 header totals the three things that matter when planning a day: **walking distance**,
 **total time** (walking at ~4.2 km/h plus your dwell minutes), and **stop count**.
 
-- Drag the numbered badge in the list to reorder stops — the route re-routes instantly.
+- Drag the numbered badge in the list to reorder stops.
 - Drag a marker on the map to move a stop.
+- **Drag the line between two stops to bend it.** See below.
 - Click a badge to fly to that stop.
 - Keep several routes with the dropdown; each gets its own colour.
 
-**Copy link** packs the whole route into the URL, so a route planned at your desk opens on
-your phone without any account or sync. **Export** writes a JSON file; **Import** reads one
-back.
+**Copy link** packs a route into the URL, so an unpublished draft can be opened on your
+phone without any account or sync. **Export** writes a JSON file; **Import** reads one back.
 
-Routes are stored in your browser (`localStorage`) on the device you built them on. There is
-no server and no account — which also means clearing site data clears your routes, so export
-anything you'd hate to lose.
+## Bending the line
+
+The router is only as good as OpenStreetMap, and Huaqiangbei is full of cut-throughs,
+arcades and indoor shortcuts nobody has mapped. So the routed line is a starting point, not
+a verdict.
+
+Drag any point on the line and it becomes a **via point** — a white handle the route must
+pass through. The two halves either side are still routed on real footpaths, so the distance
+stays honest; you've only told the router which way to go.
+
+- **Drag the line** → adds a via point there.
+- **Drag a handle** → moves it.
+- **Alt-click a handle** → removes it.
+
+Reordering stops clears the via points on the affected route, since a hand-drawn detour
+between two stops means nothing once their order changes.
+
+## Who can edit
+
+Routes are **public** — everyone loading the site gets the same routes from
+`site/data/routes.json`, committed in this repo.
+
+Editing is **yours alone**. The lock button asks for a GitHub fine-grained token with
+`Contents: Read and write` on this repo; without one the site is strictly read-only, with no
+add, edit, delete or publish controls. With one, the **Publish** button commits
+`routes.json` straight to `main` via the GitHub API and Pages redeploys in about a minute.
+
+The token is stored only in your browser's `localStorage`. It is never committed and never
+sent anywhere except `api.github.com`. It is a real credential: anyone with access to that
+device can publish as you, so revoke it at
+[github.com/settings/tokens](https://github.com/settings/tokens) if a device is lost, and
+use **Sign out** in the lock dialog to remove it from a browser.
+
+Unpublished edits are kept as a local draft and restored on your next visit, so closing the
+tab mid-route doesn't lose anything — but they aren't public until you press Publish.
 
 ## Why the line bends
 
@@ -69,7 +101,8 @@ npx wrangler pages deploy site      # Cloudflare Pages
 npx netlify deploy --dir=site --prod
 ```
 
-For GitHub Pages, serve the `site/` folder from the repo's Pages settings.
+This repo publishes itself: `.github/workflows/pages.yml` uploads `site/` to GitHub Pages on
+every push to `main`.
 
 ## Layout
 
@@ -81,6 +114,7 @@ scripts/serve.mjs      dev-only static server
 data/hqb.osm.json      raw download (24 MB, gitignored)
 site/                  ← the deployable site
   data/                basemap layers + walkgraph.json
+  data/routes.json     the published routes (public read, author-only write)
   router.js            Dijkstra over the walking graph
   app.js               map, route model, UI
   vendor/ fonts/       MapLibre and label glyphs, vendored so nothing is fetched at runtime

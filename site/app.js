@@ -29,6 +29,7 @@ const style = {
     water: geo('water'), green: geo('green'), buildings: geo('buildings'),
     roads: geo('roads'), rail: geo('rail'), pois: geo('pois'),
     route: { type: 'geojson', data: EMPTY },
+    vias: { type: 'geojson', data: EMPTY },
   },
   layers: [
     { id: 'bg', type: 'background', paint: { 'background-color': '#f1efe9' } },
@@ -78,6 +79,18 @@ const style = {
     { id: 'route-direct', type: 'line', source: 'route', filter: ['==', ['get', 'direct'], true],
       layout: { 'line-cap': 'butt' },
       paint: { 'line-color': '#fff', 'line-width': 2, 'line-dasharray': [1, 2] } },
+    // Invisible but wide, so the line is easy to grab without drawing a fat line.
+    { id: 'route-hit', type: 'line', source: 'route',
+      layout: { 'line-cap': 'round' },
+      paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 22 } },
+    // Handles for the bends you've added by hand.
+    { id: 'via-dot', type: 'circle', source: 'vias',
+      paint: {
+        'circle-radius': 5,
+        'circle-color': '#fff',
+        'circle-stroke-color': ['get', 'color'],
+        'circle-stroke-width': 2.5,
+      } },
   ],
 };
 
@@ -100,20 +113,109 @@ const panelPad = () => (innerWidth > 820 ? { top: 60, bottom: 100, left: 372, ri
 // against a stale size lands a whole zoom level short.
 const fitCore = () => { map.resize(); map.fitBounds(CORE, { padding: panelPad(), duration: 0 }); };
 
-/* ---------------------------------------------------------------- state */
+/* ---------------------------------------------------------------- store
+
+   Routes are public: everyone loads the same routes.json committed to the repo.
+   Writing needs a GitHub token with contents:write on this repo, held only in the
+   author's own browser — so anyone can read the routes, nobody else can change them. */
+
+const REPO = { owner: 'hansstam86', repo: 'hqb-routes', path: 'site/data/routes.json', branch: 'main' };
+const TOKEN_KEY = 'hqb.gh.token';
+const DRAFT_KEY = 'hqb.routes.draft.v2';
+const LEGACY_KEY = 'hqb.routes.v1';
 
 let routes = [];
+let publishedJson = '[]';     // baseline for the dirty check
+let fileSha = null;
+let canBuild = false;
 let activeId = null;
 let router = null;
 let addMode = false;
 let markers = [];
 let legs = [];
 
+const token = () => localStorage.getItem(TOKEN_KEY);
 const active = () => routes.find((r) => r.id === activeId) ?? null;
-const save = () => localStorage.setItem(STORE, JSON.stringify(routes));
+const dirty = () => JSON.stringify(routes) !== publishedJson;
+const saveDraft = () => canBuild && localStorage.setItem(DRAFT_KEY, JSON.stringify(routes));
 
+const b64 = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+const unb64 = (s) => new TextDecoder().decode(Uint8Array.from(atob(s), (c) => c.charCodeAt(0)));
+
+async function gh(path, init = {}) {
+  const res = await fetch(`https://api.github.com/${path}`, {
+    ...init,
+    headers: {
+      accept: 'application/vnd.github+json',
+      authorization: `Bearer ${token()}`,
+      'content-type': 'application/json',
+      ...init.headers,
+    },
+  });
+  if (!res.ok) throw new Error(`GitHub ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  return res.json();
+}
+
+async function loadPublished() {
+  // Cache-bust for the author, so a just-published change isn't masked by the CDN.
+  const url = `./data/routes.json${canBuild ? `?t=${Date.now()}` : ''}`;
+  try {
+    const r = await fetch(url, { cache: canBuild ? 'no-store' : 'default' });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    return Array.isArray(j) ? j : [];
+  } catch { return []; }
+}
+
+async function publish() {
+  const btn = $('#publish');
+  btn.disabled = true;
+  btn.textContent = 'Publishing…';
+  try {
+    // Re-read the sha immediately before writing so a stale one can't clobber.
+    let sha = null;
+    try {
+      const meta = await gh(`repos/${REPO.owner}/${REPO.repo}/contents/${REPO.path}?ref=${REPO.branch}`);
+      sha = meta.sha;
+    } catch { /* file may not exist yet */ }
+
+    const body = JSON.stringify(routes, null, 2);
+    await gh(`repos/${REPO.owner}/${REPO.repo}/contents/${REPO.path}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        message: `Update walking routes (${routes.length} route${routes.length === 1 ? '' : 's'})`,
+        content: b64(body),
+        branch: REPO.branch,
+        ...(sha ? { sha } : {}),
+      }),
+    });
+    publishedJson = JSON.stringify(routes);
+    fileSha = null;
+    localStorage.removeItem(DRAFT_KEY);
+    toast('Published — live in about a minute');
+  } catch (err) {
+    console.error(err);
+    toast(err.message.includes('401') || err.message.includes('403')
+      ? 'Token rejected — check it has Contents: Read and write'
+      : `Publish failed: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    refreshPublish();
+  }
+}
+
+function refreshPublish() {
+  const btn = $('#publish');
+  btn.hidden = !canBuild;
+  btn.textContent = dirty() ? 'Publish changes' : 'Published';
+  btn.disabled = !dirty();
+}
+
+/* ---------------------------------------------------------------- helpers */
+
+const COLORS_ = COLORS;
 function newRoute(name) {
-  const r = { id: uid(), name: name || `Route ${routes.length + 1}`, color: COLORS[routes.length % COLORS.length], stops: [] };
+  const r = { id: uid(), name: name || `Route ${routes.length + 1}`, color: COLORS_[routes.length % COLORS_.length], stops: [] };
   routes.push(r);
   activeId = r.id;
   return r;
@@ -125,29 +227,57 @@ function toast(msg) {
   el.textContent = msg;
   $('#toasts').append(el);
   requestAnimationFrame(() => el.classList.add('go'));
-  setTimeout(() => el.remove(), 2600);
+  setTimeout(() => el.remove(), 3200);
 }
 
-/* ---------------------------------------------------------------- routing */
+const fmtDist = (m) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
+const fmtMins = (n) => (n >= 60 ? `${Math.floor(n / 60)}h ${Math.round(n % 60)}m` : `${Math.round(n)} min`);
+
+/* ---------------------------------------------------------------- routing
+
+   A leg runs from stop i to stop i+1 and is split into sub-legs by the via points
+   held on stop i+1. Dragging the line inserts a via, which is how you overrule the
+   router where it doesn't know about a shortcut. */
+
+function chainFor(i) {
+  const s = active().stops;
+  return [[s[i].lng, s[i].lat], ...(s[i + 1].via ?? []).map((v) => [...v]), [s[i + 1].lng, s[i + 1].lat]];
+}
 
 function recompute() {
   const r = active();
   legs = [];
   if (!r || r.stops.length < 2 || !router) return;
-  for (let i = 1; i < r.stops.length; i++) {
-    const a = r.stops[i - 1], b = r.stops[i];
-    legs.push(router.leg([a.lng, a.lat], [b.lng, b.lat]));
+  for (let i = 0; i < r.stops.length - 1; i++) {
+    const chain = chainFor(i);
+    const subs = [];
+    for (let k = 1; k < chain.length; k++) subs.push(router.leg(chain[k - 1], chain[k]));
+    legs.push({
+      subs,
+      metres: subs.reduce((a, s) => a + s.metres, 0),
+      direct: subs.some((s) => s.direct),
+    });
   }
 }
 
 function drawRoute() {
   const r = active();
-  const features = legs.map((l, i) => ({
-    type: 'Feature',
-    properties: { color: r.color, direct: l.direct, i },
-    geometry: { type: 'LineString', coordinates: l.coords },
-  }));
-  map.getSource('route')?.setData({ type: 'FeatureCollection', features });
+  const feats = [];
+  const vias = [];
+  legs.forEach((leg, i) => {
+    leg.subs.forEach((sub, k) => {
+      feats.push({
+        type: 'Feature',
+        properties: { color: r.color, direct: sub.direct, leg: i, sub: k },
+        geometry: { type: 'LineString', coordinates: sub.coords },
+      });
+    });
+    (r.stops[i + 1].via ?? []).forEach((v, idx) => {
+      vias.push({ type: 'Feature', properties: { leg: i, idx, color: r.color }, geometry: { type: 'Point', coordinates: v } });
+    });
+  });
+  map.getSource('route')?.setData({ type: 'FeatureCollection', features: feats });
+  map.getSource('vias')?.setData({ type: 'FeatureCollection', features: canBuild ? vias : [] });
 
   for (const m of markers) m.remove();
   markers = [];
@@ -157,47 +287,111 @@ function drawRoute() {
     el.className = 'marker';
     el.style.background = r.color;
     el.textContent = String(i + 1);
-    const m = new maplibregl.Marker({ element: el, draggable: true })
+    const m = new maplibregl.Marker({ element: el, draggable: canBuild })
       .setLngLat([s.lng, s.lat]).addTo(map);
-    m.on('dragstart', () => el.classList.add('drag'));
-    m.on('dragend', () => {
-      el.classList.remove('drag');
-      const p = m.getLngLat();
-      s.lng = p.lng; s.lat = p.lat;
-      commit();
-    });
+    if (canBuild) {
+      m.on('dragstart', () => el.classList.add('drag'));
+      m.on('dragend', () => {
+        el.classList.remove('drag');
+        const p = m.getLngLat();
+        s.lng = +p.lng.toFixed(6); s.lat = +p.lat.toFixed(6);
+        commit();
+      });
+    }
     markers.push(m);
   });
 }
-
-const fmtDist = (m) => (m >= 1000 ? `${(m / 1000).toFixed(2)} km` : `${Math.round(m)} m`);
-const fmtMins = (n) => (n >= 60 ? `${Math.floor(n / 60)}h ${Math.round(n % 60)}m` : `${Math.round(n)} min`);
 
 function refreshStats() {
   const r = active();
   const metres = legs.reduce((a, l) => a + l.metres, 0);
   const dwell = (r?.stops ?? []).reduce((a, s) => a + (Number(s.mins) || 0), 0);
-  const walk = metres / WALK_M_PER_MIN;
   $('#statDist').textContent = fmtDist(metres);
-  $('#statTime').textContent = fmtMins(walk + dwell);
+  $('#statTime').textContent = fmtMins(metres / WALK_M_PER_MIN + dwell);
   $('#statStops').textContent = r?.stops.length ?? 0;
 
   const broken = legs.filter((l) => l.direct).length;
   const warn = $('#warn');
   warn.hidden = !broken;
   if (broken) {
-    warn.textContent = `${broken} leg${broken > 1 ? 's' : ''} shown as a dashed straight line — `
-      + `no mapped footpath connects those stops, so that distance is as-the-crow-flies.`;
+    warn.textContent = `${broken} leg${broken > 1 ? 's' : ''} drawn as a dashed straight line — `
+      + `no mapped footpath connects those points, so that distance is as-the-crow-flies.`;
   }
 }
 
-/* commit = recompute geometry, redraw, update UI, persist. */
 function commit() {
   recompute();
   drawRoute();
   refreshStats();
   renderStops();
-  save();
+  saveDraft();
+  refreshPublish();
+}
+
+/* ---------------------------------------------------------------- line editing */
+
+let dragVia = null;      // { leg, idx } of an existing via being moved
+let pendingVia = null;   // { leg, sub } of a new via being dragged out of the line
+
+function insertVia(leg, sub, lngLat) {
+  const s = active().stops[leg + 1];
+  s.via ??= [];
+  s.via.splice(sub, 0, [+lngLat.lng.toFixed(6), +lngLat.lat.toFixed(6)]);
+}
+
+if (true) {
+  // Grab the line itself to bend it.
+  map.on('mousedown', 'route-hit', (e) => {
+    if (!canBuild || addMode) return;
+    e.preventDefault();
+    const f = e.features[0];
+    pendingVia = { leg: f.properties.leg, sub: f.properties.sub };
+    map.getCanvas().style.cursor = 'grabbing';
+  });
+
+  map.on('mousedown', 'via-dot', (e) => {
+    if (!canBuild) return;
+    e.preventDefault();
+    const f = e.features[0];
+    if (e.originalEvent.altKey) {
+      const s = active().stops[f.properties.leg + 1];
+      s.via.splice(f.properties.idx, 1);
+      commit();
+      return;
+    }
+    dragVia = { leg: f.properties.leg, idx: f.properties.idx };
+    map.getCanvas().style.cursor = 'grabbing';
+  });
+
+  map.on('mousemove', (e) => {
+    if (dragVia) {
+      const s = active().stops[dragVia.leg + 1];
+      s.via[dragVia.idx] = [+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)];
+      recompute(); drawRoute();
+      return;
+    }
+    if (pendingVia) {
+      insertVia(pendingVia.leg, pendingVia.sub, e.lngLat);
+      dragVia = { leg: pendingVia.leg, idx: pendingVia.sub };
+      pendingVia = null;
+      recompute(); drawRoute();
+    }
+  });
+
+  // On the document, so releasing over the panel or off-window still ends the drag.
+  const endDrag = () => {
+    if (!dragVia && !pendingVia) return;
+    dragVia = null; pendingVia = null;
+    map.getCanvas().style.cursor = '';
+    commit();
+  };
+  document.addEventListener('mouseup', endDrag);
+  window.addEventListener('blur', endDrag);
+
+  for (const l of ['route-hit', 'via-dot']) {
+    map.on('mouseenter', l, () => { if (canBuild && !addMode) map.getCanvas().style.cursor = 'grab'; });
+    map.on('mouseleave', l, () => { if (!dragVia) map.getCanvas().style.cursor = addMode ? 'crosshair' : ''; });
+  }
 }
 
 /* ---------------------------------------------------------------- stops UI */
@@ -206,57 +400,70 @@ function renderStops() {
   const r = active();
   const el = $('#stops');
   el.innerHTML = '';
-  $('#empty').hidden = !!(r && r.stops.length);
+  const has = !!(r && r.stops.length);
+  $('#empty').hidden = has;
+  $('#empty').innerHTML = canBuild
+    ? 'Click <b>Add stops</b>, then click the map to drop stops in order. Drag the line between stops to bend it onto the path you actually walk.'
+    : (routes.length ? 'This route has no stops yet.' : 'No routes published yet.');
   if (!r) return;
 
   r.stops.forEach((s, i) => {
     const li = document.createElement('li');
     li.className = 'stop';
-    li.draggable = false;
     li.dataset.i = i;
     const legTxt = i > 0 && legs[i - 1]
       ? `${fmtDist(legs[i - 1].metres)}${legs[i - 1].direct ? ' direct' : ''}` : 'start';
-    li.innerHTML = `
-      <div class="n" style="background:${r.color}" draggable="true" title="Drag to reorder">${i + 1}</div>
-      <div class="body">
-        <input class="nm" value="${esc(s.name)}" placeholder="Stop ${i + 1}" autocomplete="off" spellcheck="false" />
-        <textarea class="nt" rows="1" placeholder="What to do here…">${esc(s.note)}</textarea>
-      </div>
-      <div class="side">
-        <button class="x" title="Remove stop">×</button>
-        <div class="mins"><input class="mi" value="${Number(s.mins) || 0}" inputmode="numeric" autocomplete="off" /> min</div>
-        <span class="legdist">${legTxt}</span>
-      </div>`;
 
-    li.querySelector('.nm').oninput = (e) => { s.name = e.target.value; save(); };
-    li.querySelector('.nt').oninput = (e) => { s.note = e.target.value; autoGrow(e.target); save(); };
-    li.querySelector('.mi').oninput = (e) => { s.mins = e.target.value.replace(/\D/g, ''); refreshStats(); save(); };
-    li.querySelector('.x').onclick = () => { r.stops.splice(i, 1); commit(); };
-    li.querySelector('.n').onclick = () => map.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.getZoom(), 17) });
+    if (canBuild) {
+      li.innerHTML = `
+        <div class="n" style="background:${r.color}" draggable="true" title="Drag to reorder">${i + 1}</div>
+        <div class="body">
+          <input class="nm" value="${esc(s.name)}" placeholder="Stop ${i + 1}" autocomplete="off" spellcheck="false" />
+          <textarea class="nt" rows="1" placeholder="What to do here…">${esc(s.note)}</textarea>
+        </div>
+        <div class="side">
+          <button class="x" title="Remove stop">×</button>
+          <div class="mins"><input class="mi" value="${Number(s.mins) || 0}" inputmode="numeric" autocomplete="off" /> min</div>
+          <span class="legdist">${legTxt}</span>
+        </div>`;
+      li.querySelector('.nm').oninput = (e) => { s.name = e.target.value; saveDraft(); refreshPublish(); };
+      li.querySelector('.nt').oninput = (e) => { s.note = e.target.value; autoGrow(e.target); saveDraft(); refreshPublish(); };
+      li.querySelector('.mi').oninput = (e) => { s.mins = e.target.value.replace(/\D/g, ''); refreshStats(); saveDraft(); refreshPublish(); };
+      li.querySelector('.x').onclick = () => { r.stops.splice(i, 1); if (r.stops[i]) r.stops[i].via = []; commit(); };
 
-    // Reorder by dragging the number badge.
-    const badge = li.querySelector('.n');
-    badge.addEventListener('dragstart', (e) => {
-      e.dataTransfer.setData('text/plain', String(i));
-      e.dataTransfer.effectAllowed = 'move';
-      li.classList.add('drag');
-    });
-    badge.addEventListener('dragend', () => li.classList.remove('drag'));
-    li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('over'); });
-    li.addEventListener('dragleave', () => li.classList.remove('over'));
-    li.addEventListener('drop', (e) => {
-      e.preventDefault();
-      li.classList.remove('over');
-      const from = Number(e.dataTransfer.getData('text/plain'));
-      const to = Number(li.dataset.i);
-      if (Number.isNaN(from) || from === to) return;
-      const [moved] = r.stops.splice(from, 1);
-      r.stops.splice(to, 0, moved);
-      commit();
-    });
-
-    el.append(li);
-    autoGrow(li.querySelector('.nt'));
+      const badge = li.querySelector('.n');
+      badge.onclick = () => map.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.getZoom(), 17) });
+      badge.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(i)); li.classList.add('drag'); });
+      badge.addEventListener('dragend', () => li.classList.remove('drag'));
+      li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('over'); });
+      li.addEventListener('dragleave', () => li.classList.remove('over'));
+      li.addEventListener('drop', (e) => {
+        e.preventDefault(); li.classList.remove('over');
+        const from = Number(e.dataTransfer.getData('text/plain'));
+        const to = Number(li.dataset.i);
+        if (Number.isNaN(from) || from === to) return;
+        const [moved] = r.stops.splice(from, 1);
+        r.stops.splice(to, 0, moved);
+        // Reordering invalidates the hand-drawn detours around the moved stop.
+        for (const st of r.stops) st.via = [];
+        commit();
+      });
+      el.append(li);
+      autoGrow(li.querySelector('.nt'));
+    } else {
+      li.innerHTML = `
+        <div class="n" style="background:${r.color}">${i + 1}</div>
+        <div class="body">
+          <div class="ro-name">${esc(s.name) || `Stop ${i + 1}`}</div>
+          ${s.note ? `<div class="ro-note">${esc(s.note)}</div>` : ''}
+        </div>
+        <div class="side">
+          ${Number(s.mins) ? `<div class="mins">${Number(s.mins)} min</div>` : ''}
+          <span class="legdist">${legTxt}</span>
+        </div>`;
+      li.querySelector('.n').onclick = () => map.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.getZoom(), 17) });
+      el.append(li);
+    }
   });
 }
 
@@ -266,12 +473,14 @@ function autoGrow(ta) { ta.style.height = 'auto'; ta.style.height = `${ta.scroll
 
 function renderRouteBar() {
   const sel = $('#routeSel');
-  sel.innerHTML = routes.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+  sel.innerHTML = routes.length
+    ? routes.map((r) => `<option value="${r.id}">${esc(r.name)}</option>`).join('')
+    : '<option value="">— no routes —</option>';
   sel.value = activeId ?? '';
   const r = active();
   $('#routeName').value = r?.name ?? '';
-  $('#swatches').innerHTML = COLORS
-    .map((c) => `<button data-c="${c}" style="background:${c}" class="${r && r.color === c ? 'on' : ''}" title="${c}"></button>`).join('');
+  $('#swatches').innerHTML = COLORS_
+    .map((c) => `<button data-c="${c}" style="background:${c}" class="${r && r.color === c ? 'on' : ''}"></button>`).join('');
   $('#swatches').querySelectorAll('button').forEach((b) => {
     b.onclick = () => { const a = active(); if (!a) return; a.color = b.dataset.c; renderRouteBar(); commit(); };
   });
@@ -281,14 +490,13 @@ function selectRoute(id) {
   activeId = id;
   renderRouteBar();
   commit();
-  const r = active();
-  if (r?.stops.length) fitRoute();
+  if (active()?.stops.length) fitRoute();
 }
 
 function fitRoute() {
   const r = active();
   if (!r?.stops.length) return;
-  const pts = legs.length ? legs.flatMap((l) => l.coords) : r.stops.map((s) => [s.lng, s.lat]);
+  const pts = legs.length ? legs.flatMap((l) => l.subs.flatMap((s) => s.coords)) : r.stops.map((s) => [s.lng, s.lat]);
   const b = pts.reduce((acc, c) => acc.extend(c), new maplibregl.LngLatBounds(pts[0], pts[0]));
   map.resize();
   map.fitBounds(b, { padding: panelPad(), maxZoom: 17.5 });
@@ -297,52 +505,42 @@ function fitRoute() {
 /* ---------------------------------------------------------------- map input */
 
 function setAddMode(on) {
-  addMode = on;
-  $('#addMode').classList.toggle('on', on);
-  $('#hint').textContent = on ? 'Click the map to drop stops in order' : '';
-  map.getCanvas().style.cursor = on ? 'crosshair' : '';
+  addMode = on && canBuild;
+  $('#addMode').classList.toggle('on', addMode);
+  $('#hint').textContent = addMode ? 'Click the map to drop stops in order' : 'Drag the line to bend it';
+  map.getCanvas().style.cursor = addMode ? 'crosshair' : '';
 }
 
 map.on('click', (e) => {
-  if (!addMode) return;
+  if (!addMode || !canBuild) return;
   const r = active() ?? newRoute();
-  // If you clicked on a mapped place, take its name — saves typing the obvious ones.
   const hit = map.queryRenderedFeatures(e.point, { layers: ['poi', 'poi-label', 'mall-label'].filter((l) => map.getLayer(l)) });
   r.stops.push({
-    id: uid(),
-    name: hit[0]?.properties?.name ?? '',
-    note: '', mins: 10,
-    lng: +e.lngLat.lng.toFixed(6), lat: +e.lngLat.lat.toFixed(6),
+    id: uid(), name: hit[0]?.properties?.name ?? '', note: '', mins: 10,
+    lng: +e.lngLat.lng.toFixed(6), lat: +e.lngLat.lat.toFixed(6), via: [],
   });
   renderRouteBar();
   commit();
 });
 
-$('#addMode').onclick = () => setAddMode(!addMode);
-$('#undo').onclick = () => {
-  const r = active();
-  if (!r?.stops.length) return;
-  r.stops.pop();
-  commit();
-};
-
 /* ---------------------------------------------------------------- chrome */
 
 $('#routeSel').onchange = (e) => selectRoute(e.target.value);
 $('#newRoute').onclick = () => { newRoute(); renderRouteBar(); commit(); setAddMode(true); };
-$('#routeName').oninput = (e) => { const r = active(); if (!r) return; r.name = e.target.value; save(); renderRouteBar(); };
+$('#routeName').oninput = (e) => { const r = active(); if (!r) return; r.name = e.target.value; renderRouteBar(); saveDraft(); refreshPublish(); };
+$('#addMode').onclick = () => setAddMode(!addMode);
+$('#undo').onclick = () => { const r = active(); if (r?.stops.length) { r.stops.pop(); commit(); } };
 $('#delRoute').onclick = () => {
   const r = active();
-  if (!r) return;
-  if (!confirm(`Delete "${r.name}"? This can't be undone.`)) return;
+  if (!r || !confirm(`Delete "${r.name}"? Publish afterwards to remove it for everyone.`)) return;
   routes = routes.filter((x) => x.id !== r.id);
   activeId = routes[0]?.id ?? null;
-  if (!routes.length) newRoute();
   renderRouteBar();
   commit();
 };
 $('#collapse').onclick = () => { $('#panel').classList.add('hide'); $('#reveal').hidden = false; };
 $('#reveal').onclick = () => { $('#panel').classList.remove('hide'); $('#reveal').hidden = true; };
+$('#publish').onclick = publish;
 
 $('#export').onclick = () => {
   const blob = new Blob([JSON.stringify(routes, null, 2)], { type: 'application/json' });
@@ -357,54 +555,114 @@ $('#import').onchange = async (e) => {
   const f = e.target.files[0];
   if (!f) return;
   try {
-    const incoming = JSON.parse(await f.text());
-    const list = Array.isArray(incoming) ? incoming : [incoming];
-    for (const r of list) {
-      if (!Array.isArray(r.stops)) continue;
-      routes.push({ ...r, id: uid() });
+    const list = JSON.parse(await f.text());
+    for (const r of (Array.isArray(list) ? list : [list])) {
+      if (Array.isArray(r.stops)) routes.push({ ...r, id: uid() });
     }
-    activeId = routes[routes.length - 1].id;
-    renderRouteBar();
-    commit();
-    toast(`Imported ${list.length} route${list.length > 1 ? 's' : ''}`);
+    activeId = routes[routes.length - 1]?.id ?? null;
+    renderRouteBar(); commit();
+    toast('Imported');
   } catch (err) { alert(`Could not import: ${err.message}`); }
   e.target.value = '';
 };
 
-/* A route packed into the URL, so a route built at the desk opens on your phone. */
-const packRoute = (r) => btoa(unescape(encodeURIComponent(JSON.stringify({
-  n: r.name, c: r.color, s: r.stops.map((s) => [s.lng, s.lat, s.name, s.note, s.mins]),
-})))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const packRoute = (r) => b64(JSON.stringify({
+  n: r.name, c: r.color, s: r.stops.map((s) => [s.lng, s.lat, s.name, s.note, s.mins, s.via ?? []]),
+})).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
-function unpackRoute(b64) {
-  const j = JSON.parse(decodeURIComponent(escape(atob(b64.replace(/-/g, '+').replace(/_/g, '/')))));
+function unpackRoute(s) {
+  const j = JSON.parse(unb64(s.replace(/-/g, '+').replace(/_/g, '/')));
   return {
-    id: uid(), name: j.n || 'Shared route', color: j.c || COLORS[0],
-    stops: (j.s || []).map(([lng, lat, name, note, mins]) => ({ id: uid(), lng, lat, name: name || '', note: note || '', mins: mins ?? 10 })),
+    id: uid(), name: j.n || 'Shared route', color: j.c || COLORS_[0],
+    stops: (j.s || []).map(([lng, lat, name, note, mins, via]) =>
+      ({ id: uid(), lng, lat, name: name || '', note: note || '', mins: mins ?? 10, via: via ?? [] })),
   };
 }
 
 $('#share').onclick = async () => {
   const r = active();
-  if (!r?.stops.length) return toast('Add some stops first');
+  if (!r?.stops.length) return toast('Nothing to share yet');
   const url = `${location.origin}${location.pathname}#r=${packRoute(r)}`;
-  try { await navigator.clipboard.writeText(url); toast('Link copied — opens this route anywhere'); }
+  try { await navigator.clipboard.writeText(url); toast('Link copied'); }
   catch { prompt('Copy this link:', url); }
 };
+
+/* ---------------------------------------------------------------- auth */
+
+function applyMode() {
+  canBuild = !!token();
+  document.body.classList.toggle('can-build', canBuild);
+  $('#lock').textContent = canBuild ? '🔓' : '🔒';
+  $('#lock').title = canBuild ? 'Editing unlocked — click to manage' : 'Editing locked';
+  $('#signout').hidden = !canBuild;
+  refreshPublish();
+}
+
+$('#lock').onclick = () => {
+  $('#token').value = '';
+  $('#auth').showModal();
+};
+
+$('#auth').addEventListener('close', async () => {
+  const dlg = $('#auth');
+  if (dlg.returnValue === 'signout') {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(DRAFT_KEY);
+    applyMode();
+    location.reload();
+    return;
+  }
+  if (dlg.returnValue !== 'ok') return;
+  const t = $('#token').value.trim();
+  if (!t) return;
+  localStorage.setItem(TOKEN_KEY, t);
+  try {
+    await gh(`repos/${REPO.owner}/${REPO.repo}`);
+    applyMode();
+    setAddMode(false);
+    commit();
+    toast('Editing unlocked');
+  } catch (err) {
+    localStorage.removeItem(TOKEN_KEY);
+    applyMode();
+    toast('That token cannot reach the repo — check its permissions');
+  }
+});
 
 /* ---------------------------------------------------------------- boot */
 
 map.on('load', async () => {
   try {
-    const graph = await (await fetch('./data/walkgraph.json')).json();
-    router = createRouter(graph);
+    router = createRouter(await (await fetch('./data/walkgraph.json')).json());
   } catch (err) {
-    console.error('walk graph failed to load', err);
+    console.error('walk graph failed', err);
     toast('Routing unavailable — legs will be straight lines');
   }
 
-  try { routes = JSON.parse(localStorage.getItem(STORE) || '[]'); } catch { routes = []; }
-  if (!Array.isArray(routes)) routes = [];
+  applyMode();
+  const pub = await loadPublished();
+  publishedJson = JSON.stringify(pub);
+  routes = JSON.parse(publishedJson);
+
+  if (canBuild) {
+    // An unpublished draft beats the published copy; losing edits would be worse
+    // than showing stale ones, and Publish is always one click away.
+    const draft = localStorage.getItem(DRAFT_KEY);
+    if (draft && draft !== publishedJson) {
+      try {
+        const d = JSON.parse(draft);
+        if (Array.isArray(d)) { routes = d; toast('Restored unpublished changes'); }
+      } catch { /* ignore */ }
+    }
+    // One-time rescue of routes built before routes lived in the repo.
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy && !routes.length) {
+      try {
+        const l = JSON.parse(legacy);
+        if (Array.isArray(l) && l.length) { routes = l; toast('Imported your earlier local routes'); }
+      } catch { /* ignore */ }
+    }
+  }
 
   const hash = location.hash.match(/^#r=(.+)$/);
   if (hash) {
@@ -415,14 +673,12 @@ map.on('load', async () => {
     } catch { toast('That shared link could not be read'); }
   }
 
-  if (!routes.length) newRoute('My first route');
-  activeId = routes[routes.length - 1].id;
-
+  activeId = routes[0]?.id ?? null;
   renderRouteBar();
   commit();
-  if (active()?.stops.length) fitRoute();
-  else { fitCore(); setAddMode(true); }
+  setAddMode(false);
+  if (active()?.stops.length) fitRoute(); else fitCore();
 });
 
 map.on('error', (e) => console.warn('map:', e.error?.message || e));
-window.hqb = { routes: () => routes, map, router: () => router };
+window.hqb = { routes: () => routes, map, legs: () => legs };
