@@ -192,3 +192,14 @@ body.can-build .toolbar.build-only { display: flex !important; }
 .fineprint { font-size: 11.5px; line-height: 1.45; }
 .auth menu { display: flex; gap: 8px; justify-content: flex-end; margin: 14px 0 0; padding: 0; }
 .auth menu .danger { margin-right: auto; }
+
+.lang { font-weight: 700; font-size: 12px; margin-left: auto; }
+#lock { margin-left: 6px; }
+.rn-target { font-size: 13px; color: var(--muted); margin-bottom: 12px !important; }
+.rn-target b { color: var(--ink); }
+.rn-target .kind { text-transform: uppercase; letter-spacing: .06em; font-size: 10.5px; }
+.rn-field { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 10px; }
+.rn-field input { margin-top: 4px; text-transform: none; letter-spacing: normal; }
+.stop .zh { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+body.can-build .tool#renameMode { display: inline-block !important; }
+.stop .zhin { font-size: 12.5px; color: var(--muted); font-weight: 500; }

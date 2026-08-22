@@ -51,7 +51,15 @@ const centroid = (g) => {
 };
 
 const layers = { water: [], green: [], buildings: [], roads: [], rail: [], pois: [] };
-const nm = (t) => ({ name: t.name || t['name:zh'] || t['name:en'] || null, en: t['name:en'] || null });
+
+// Keep the two scripts apart. OSM's plain `name` here is usually Chinese, but not
+// always, so decide by what the string actually contains rather than assuming.
+const HAN = /[\u4e00-\u9fff]/;
+function nm(t) {
+  const zh = t['name:zh'] || (t.name && HAN.test(t.name) ? t.name : null);
+  const en = t['name:en'] || t.int_name || (t.name && !HAN.test(t.name) ? t.name : null);
+  return { name: t.name || zh || en || null, zh: zh || null, en: en || null };
+}
 
 for (const f of gj.features) {
   const t = f.properties || {}, g = f.geometry;
@@ -59,7 +67,9 @@ for (const f of gj.features) {
   g.coordinates = round(g.coordinates);
   const area = g.type === 'Polygon' || g.type === 'MultiPolygon';
   const line = g.type === 'LineString' || g.type === 'MultiLineString';
-  const put = (k, p) => layers[k].push({ type: 'Feature', properties: p, geometry: g });
+  // e.g. "way/123456" -- the key a custom name is filed under.
+  const oid = String(f.id ?? t.id ?? '');
+  const put = (k, p) => layers[k].push({ type: 'Feature', properties: { oid, ...p }, geometry: g });
 
   if (area && (t.natural === 'water' || t.waterway || t.landuse === 'reservoir')) put('water', {});
   else if (area && (t.leisure === 'park' || t.leisure === 'garden' || t.leisure === 'pitch'
@@ -74,7 +84,7 @@ for (const f of gj.features) {
   const label = nm(t).name;
   if (cls && label) {
     const at = g.type === 'Point' ? g.coordinates : area ? centroid(g) : null;
-    if (at) layers.pois.push({ type: 'Feature', properties: { ...nm(t), cls }, geometry: { type: 'Point', coordinates: at } });
+    if (at) layers.pois.push({ type: 'Feature', properties: { oid, ...nm(t), cls }, geometry: { type: 'Point', coordinates: at } });
   }
 }
 

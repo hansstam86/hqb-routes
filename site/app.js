@@ -5,17 +5,14 @@ const $ = (s) => document.querySelector(s);
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const COLORS = ['#c81e3a', '#1d4ed8', '#047857', '#b45309', '#7c3aed', '#0e7490'];
 const WALK_M_PER_MIN = 70;          // ~4.2 km/h, allowing for Huaqiangbei crowds
-const STORE = 'hqb.routes.v1';
 
 const uid = () => (crypto.randomUUID?.() ?? String(Math.random()).slice(2) + Date.now());
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* ---------------------------------------------------------------- basemap */
 
-const geo = (n) => ({
-  type: 'geojson', data: `./data/${n}.geojson`,
-  attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
-});
+const OSM_ATTRIB = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
+const geo = (n) => ({ type: 'geojson', data: `./data/${n}.geojson`, attribution: OSM_ATTRIB });
 const road = (id, cls, stops, color, extra = {}) => ({
   id, type: 'line', source: 'roads', filter: ['==', ['get', 'cls'], cls],
   layout: { 'line-cap': 'round', 'line-join': 'round' },
@@ -26,8 +23,11 @@ const style = {
   version: 8,
   glyphs: './fonts/{fontstack}/{range}.pbf',
   sources: {
-    water: geo('water'), green: geo('green'), buildings: geo('buildings'),
-    roads: geo('roads'), rail: geo('rail'), pois: geo('pois'),
+    water: geo('water'), green: geo('green'), rail: geo('rail'),
+    // Loaded as objects so labels can be rewritten for language and custom names.
+    buildings: { type: 'geojson', data: EMPTY, attribution: OSM_ATTRIB },
+    roads: { type: 'geojson', data: EMPTY, attribution: OSM_ATTRIB },
+    pois: { type: 'geojson', data: EMPTY, attribution: OSM_ATTRIB },
     route: { type: 'geojson', data: EMPTY },
     vias: { type: 'geojson', data: EMPTY },
   },
@@ -50,23 +50,47 @@ const style = {
     road('r-maj', 'major', [10, 2.8, 19, 26], '#fdefc8'),
     road('r-foot', 'foot', [15, 1, 19, 4.5], '#c6bdae', { 'line-dasharray': [2, 1.8] }),
 
+    // Invisible but wide, so a street can be clicked without pixel-hunting.
+    { id: 'road-hit', type: 'line', source: 'roads',
+      layout: { 'line-cap': 'round' },
+      paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 16 } },
+
     { id: 'rail', type: 'line', source: 'rail',
       paint: { 'line-color': '#b6afa3', 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1, 18, 3], 'line-dasharray': [3, 2] } },
 
     { id: 'poi', type: 'circle', source: 'pois', minzoom: 15,
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 15, 1.8, 18, 3.4],
         'circle-color': '#a89e8e', 'circle-opacity': .8 } },
+    { id: 'road-label', type: 'symbol', source: 'roads', minzoom: 15,
+      filter: ['has', 'label'],
+      layout: {
+        'symbol-placement': 'line', 'text-field': ['get', 'label'],
+        'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 15, 10, 19, 12.5],
+        'symbol-spacing': 260, 'text-max-angle': 32, 'text-padding': 4,
+      },
+      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 1], '#b45309', '#6f6757'],
+        'text-halo-color': '#f1efe9', 'text-halo-width': 1.6 } },
+
+    { id: 'building-label', type: 'symbol', source: 'buildings', minzoom: 17,
+      filter: ['all', ['has', 'label'], ['!=', ['get', 'isMall'], 1]],
+      layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'],
+        'text-size': 10.5, 'text-max-width': 8, 'text-padding': 4 },
+      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 1], '#b45309', '#7a715f'],
+        'text-halo-color': '#f1efe9', 'text-halo-width': 1.5 } },
+
     { id: 'poi-label', type: 'symbol', source: 'pois', minzoom: 16,
-      filter: ['!', ['in', ['get', 'cls'], ['literal', ['exit']]]],
-      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Regular'],
+      filter: ['all', ['has', 'label'], ['!', ['in', ['get', 'cls'], ['literal', ['exit']]]]],
+      layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 19, 12.5],
         'text-offset': [0, .9], 'text-anchor': 'top', 'text-max-width': 7, 'text-padding': 3 },
-      paint: { 'text-color': '#5f5748', 'text-halo-color': '#f6f5f2', 'text-halo-width': 1.4 } },
+      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 1], '#b45309', '#5f5748'],
+        'text-halo-color': '#f6f5f2', 'text-halo-width': 1.4 } },
     { id: 'mall-label', type: 'symbol', source: 'pois', minzoom: 14,
-      filter: ['in', ['get', 'cls'], ['literal', ['mall', 'station', 'electronics']]],
-      layout: { 'text-field': ['get', 'name'], 'text-font': ['Noto Sans Bold'],
+      filter: ['all', ['has', 'label'], ['in', ['get', 'cls'], ['literal', ['mall', 'station', 'electronics']]]],
+      layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 14, 11, 19, 14.5], 'text-max-width': 8, 'text-padding': 4 },
-      paint: { 'text-color': '#4c4438', 'text-halo-color': '#f6f5f2', 'text-halo-width': 1.8 } },
+      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 1], '#b45309', '#4c4438'],
+        'text-halo-color': '#f6f5f2', 'text-halo-width': 1.8 } },
 
     // The walked line: a white casing under a coloured core reads clearly over any background.
     { id: 'route-case', type: 'line', source: 'route',
@@ -119,25 +143,35 @@ const fitCore = () => { map.resize(); map.fitBounds(CORE, { padding: panelPad(),
    Writing needs a GitHub token with contents:write on this repo, held only in the
    author's own browser — so anyone can read the routes, nobody else can change them. */
 
-const REPO = { owner: 'hansstam86', repo: 'hqb-routes', path: 'site/data/routes.json', branch: 'main' };
+const REPO = { owner: 'hansstam86', repo: 'hqb-routes', branch: 'main' };
+const FILES = {
+  routes: { path: 'site/data/routes.json', label: 'routes' },
+  places: { path: 'site/data/places.json', label: 'names' },
+};
 const TOKEN_KEY = 'hqb.gh.token';
-const DRAFT_KEY = 'hqb.routes.draft.v2';
+const DRAFT_KEY = 'hqb.draft.v3';
 const LEGACY_KEY = 'hqb.routes.v1';
+const LANG_KEY = 'hqb.lang';
 
 let routes = [];
-let publishedJson = '[]';     // baseline for the dirty check
-let fileSha = null;
+let places = {};              // OSM id -> { en, zh }: names you've given things
+let publishedJson = { routes: '[]', places: '{}' };
+let lang = localStorage.getItem(LANG_KEY) || 'zh';
 let canBuild = false;
 let activeId = null;
 let router = null;
 let addMode = false;
+let renameMode = false;
 let markers = [];
 let legs = [];
+const basemap = { buildings: null, roads: null, pois: null };
 
+const live = { routes: () => routes, places: () => places };
 const token = () => localStorage.getItem(TOKEN_KEY);
 const active = () => routes.find((r) => r.id === activeId) ?? null;
-const dirty = () => JSON.stringify(routes) !== publishedJson;
-const saveDraft = () => canBuild && localStorage.setItem(DRAFT_KEY, JSON.stringify(routes));
+const dirtyKeys = () => Object.keys(FILES).filter((k) => JSON.stringify(live[k]()) !== publishedJson[k]);
+const dirty = () => dirtyKeys().length > 0;
+const saveDraft = () => canBuild && localStorage.setItem(DRAFT_KEY, JSON.stringify({ routes, places }));
 
 const b64 = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
 const unb64 = (s) => new TextDecoder().decode(Uint8Array.from(atob(s), (c) => c.charCodeAt(0)));
@@ -156,46 +190,45 @@ async function gh(path, init = {}) {
   return res.json();
 }
 
-async function loadPublished() {
+async function loadJson(name, fallback) {
   // Cache-bust for the author, so a just-published change isn't masked by the CDN.
-  const url = `./data/routes.json${canBuild ? `?t=${Date.now()}` : ''}`;
   try {
-    const r = await fetch(url, { cache: canBuild ? 'no-store' : 'default' });
+    const r = await fetch(`./data/${name}.json${canBuild ? `?t=${Date.now()}` : ''}`,
+      { cache: canBuild ? 'no-store' : 'default' });
     if (!r.ok) throw new Error(r.status);
-    const j = await r.json();
-    return Array.isArray(j) ? j : [];
-  } catch { return []; }
+    return await r.json();
+  } catch { return fallback; }
 }
 
 async function publish() {
   const btn = $('#publish');
+  const keys = dirtyKeys();
+  if (!keys.length) return;
   btn.disabled = true;
   btn.textContent = 'Publishing…';
   try {
-    // Re-read the sha immediately before writing so a stale one can't clobber.
-    let sha = null;
-    try {
-      const meta = await gh(`repos/${REPO.owner}/${REPO.repo}/contents/${REPO.path}?ref=${REPO.branch}`);
-      sha = meta.sha;
-    } catch { /* file may not exist yet */ }
-
-    const body = JSON.stringify(routes, null, 2);
-    await gh(`repos/${REPO.owner}/${REPO.repo}/contents/${REPO.path}`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        message: `Update walking routes (${routes.length} route${routes.length === 1 ? '' : 's'})`,
-        content: b64(body),
-        branch: REPO.branch,
-        ...(sha ? { sha } : {}),
-      }),
-    });
-    publishedJson = JSON.stringify(routes);
-    fileSha = null;
+    for (const k of keys) {
+      // Re-read the sha immediately before writing so a stale one can't clobber.
+      let sha = null;
+      try {
+        sha = (await gh(`repos/${REPO.owner}/${REPO.repo}/contents/${FILES[k].path}?ref=${REPO.branch}`)).sha;
+      } catch { /* file may not exist yet */ }
+      await gh(`repos/${REPO.owner}/${REPO.repo}/contents/${FILES[k].path}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          message: `Update ${FILES[k].label}`,
+          content: b64(JSON.stringify(live[k](), null, 2)),
+          branch: REPO.branch,
+          ...(sha ? { sha } : {}),
+        }),
+      });
+      publishedJson[k] = JSON.stringify(live[k]());
+    }
     localStorage.removeItem(DRAFT_KEY);
     toast('Published — live in about a minute');
   } catch (err) {
     console.error(err);
-    toast(err.message.includes('401') || err.message.includes('403')
+    toast(/40[13]/.test(err.message)
       ? 'Token rejected — check it has Contents: Read and write'
       : `Publish failed: ${err.message}`);
   } finally {
@@ -207,8 +240,56 @@ async function publish() {
 function refreshPublish() {
   const btn = $('#publish');
   btn.hidden = !canBuild;
-  btn.textContent = dirty() ? 'Publish changes' : 'Published';
-  btn.disabled = !dirty();
+  const n = dirtyKeys().length;
+  btn.textContent = n ? 'Publish changes' : 'Published';
+  btn.disabled = !n;
+}
+
+/* ---------------------------------------------------------------- labels
+
+   Every label on the map is computed here rather than in a style expression, so a
+   custom name and a language switch are the same operation: rewrite `label`, re-set
+   the source. Custom names are tinted so you can see which ones are yours. */
+
+const pickName = (zh, en) => (lang === 'zh' ? (zh || en) : (en || zh)) || null;
+
+function applyLabels() {
+  for (const key of ['buildings', 'roads', 'pois']) {
+    const fc = basemap[key];
+    if (!fc) continue;
+    for (const f of fc.features) {
+      const p = f.properties;
+      const o = places[p.oid];
+      const label = pickName(o?.zh || p.zh, o?.en || p.en);
+      if (label) p.label = label; else delete p.label;
+      p.custom = o ? 1 : 0;
+    }
+    map.getSource(key)?.setData(fc);
+  }
+  $('#lang').textContent = lang === 'zh' ? '中' : 'EN';
+  $('#lang').title = lang === 'zh' ? 'Showing Chinese — click for English' : 'Showing English — click for Chinese';
+}
+
+async function loadBasemap() {
+  await Promise.all(['buildings', 'roads', 'pois'].map(async (k) => {
+    try {
+      const fc = await (await fetch(`./data/${k}.geojson`)).json();
+      // Mall labels are drawn from the POI layer; don't repeat them on the building.
+      if (k === 'buildings') {
+        const malls = new Set((basemap.pois?.features ?? []).map((f) => f.properties.oid));
+        for (const f of fc.features) if (malls.has(f.properties.oid)) f.properties.isMall = 1;
+      }
+      basemap[k] = fc;
+    } catch (err) { console.warn(`basemap ${k} failed`, err); }
+  }));
+  // pois load in parallel, so flag malls once everything is in
+  const malls = new Set((basemap.pois?.features ?? [])
+    .filter((f) => ['mall', 'station', 'electronics'].includes(f.properties.cls))
+    .map((f) => f.properties.oid));
+  for (const f of basemap.buildings?.features ?? []) {
+    if (malls.has(f.properties.oid)) f.properties.isMall = 1;
+  }
+  applyLabels();
 }
 
 /* ---------------------------------------------------------------- helpers */
@@ -419,6 +500,7 @@ function renderStops() {
         <div class="n" style="background:${r.color}" draggable="true" title="Drag to reorder">${i + 1}</div>
         <div class="body">
           <input class="nm" value="${esc(s.name)}" placeholder="Stop ${i + 1}" autocomplete="off" spellcheck="false" />
+          <input class="zhin" value="${esc(s.zh)}" placeholder="中文名（给路人看）" autocomplete="off" spellcheck="false" />
           <textarea class="nt" rows="1" placeholder="What to do here…">${esc(s.note)}</textarea>
         </div>
         <div class="side">
@@ -427,6 +509,7 @@ function renderStops() {
           <span class="legdist">${legTxt}</span>
         </div>`;
       li.querySelector('.nm').oninput = (e) => { s.name = e.target.value; saveDraft(); refreshPublish(); };
+      li.querySelector('.zhin').oninput = (e) => { s.zh = e.target.value; saveDraft(); refreshPublish(); };
       li.querySelector('.nt').oninput = (e) => { s.note = e.target.value; autoGrow(e.target); saveDraft(); refreshPublish(); };
       li.querySelector('.mi').oninput = (e) => { s.mins = e.target.value.replace(/\D/g, ''); refreshStats(); saveDraft(); refreshPublish(); };
       li.querySelector('.x').onclick = () => { r.stops.splice(i, 1); if (r.stops[i]) r.stops[i].via = []; commit(); };
@@ -454,7 +537,8 @@ function renderStops() {
       li.innerHTML = `
         <div class="n" style="background:${r.color}">${i + 1}</div>
         <div class="body">
-          <div class="ro-name">${esc(s.name) || `Stop ${i + 1}`}</div>
+          <div class="ro-name">${esc(stopPrimary(s)) || `Stop ${i + 1}`}</div>
+          ${stopSecondary(s) ? `<div class="zh">${esc(stopSecondary(s))}</div>` : ''}
           ${s.note ? `<div class="ro-note">${esc(s.note)}</div>` : ''}
         </div>
         <div class="side">
@@ -466,6 +550,14 @@ function renderStops() {
     }
   });
 }
+
+// Which script leads depends on the 中/EN switch; the other sits underneath so a
+// lost visitor always has the Chinese to point at.
+const stopPrimary = (s) => (lang === 'zh' ? (s.zh || s.name) : (s.name || s.zh)) || '';
+const stopSecondary = (s) => {
+  const other = lang === 'zh' ? s.name : s.zh;
+  return other && other !== stopPrimary(s) ? other : '';
+};
 
 function autoGrow(ta) { ta.style.height = 'auto'; ta.style.height = `${ta.scrollHeight}px`; }
 
@@ -506,22 +598,118 @@ function fitRoute() {
 
 function setAddMode(on) {
   addMode = on && canBuild;
+  if (addMode) renameMode = false;
   $('#addMode').classList.toggle('on', addMode);
+  $('#renameMode')?.classList.toggle('on', renameMode);
   $('#hint').textContent = addMode ? 'Click the map to drop stops in order' : 'Drag the line to bend it';
   map.getCanvas().style.cursor = addMode ? 'crosshair' : '';
 }
 
 map.on('click', (e) => {
+  if (renameMode && canBuild) {
+    const hit = pickFeature(e.point);
+    if (hit) openRename(hit);
+    else toast('Nothing nameable there — try a building, a shop dot or a street');
+    return;
+  }
   if (!addMode || !canBuild) return;
   const r = active() ?? newRoute();
-  const hit = map.queryRenderedFeatures(e.point, { layers: ['poi', 'poi-label', 'mall-label'].filter((l) => map.getLayer(l)) });
+  // Take both scripts from the place you clicked, so the stop can be shown to a
+  // local in Chinese even if you filed it under an English name.
+  const hit = pickFeature(e.point);
+  const o = hit ? places[hit.props.oid] : null;
+  const zh = o?.zh || hit?.props?.zh || '';
+  const en = o?.en || hit?.props?.en || '';
   r.stops.push({
-    id: uid(), name: hit[0]?.properties?.name ?? '', note: '', mins: 10,
+    id: uid(), name: en || zh || '', zh, note: '', mins: 10,
     lng: +e.lngLat.lng.toFixed(6), lat: +e.lngLat.lat.toFixed(6), via: [],
   });
   renderRouteBar();
   commit();
 });
+
+/* ---------------------------------------------------------------- naming
+
+   Custom names are stored against the OSM id and replace the OSM label for
+   everyone. Most named buildings here have Chinese but no English, so both
+   fields are offered and the language switch falls back to whichever exists. */
+
+const KIND = { pois: 'place', roads: 'street', buildings: 'building' };
+let renaming = null;   // { oid, kind, osmZh, osmEn }
+
+function setRenameMode(on) {
+  renameMode = on && canBuild;
+  if (renameMode) addMode = false;
+  $('#renameMode').classList.toggle('on', renameMode);
+  $('#addMode').classList.toggle('on', addMode);
+  $('#hint').textContent = renameMode
+    ? 'Click a building, place or street to name it'
+    : (addMode ? 'Click the map to drop stops in order' : 'Drag the line to bend it');
+  map.getCanvas().style.cursor = renameMode ? 'help' : (addMode ? 'crosshair' : '');
+}
+
+// Label layers come first: clicking the words "SEG Plaza" should pick SEG Plaza,
+// not whatever unnamed service road happens to pass under the text.
+const RENAME_LAYERS = [
+  ['mall-label', 'pois'], ['poi-label', 'pois'], ['building-label', 'buildings'], ['road-label', 'roads'],
+  ['poi', 'pois'], ['road-hit', 'roads'], ['buildings', 'buildings'],
+];
+
+function pickFeature(point) {
+  const box = [[point.x - 6, point.y - 6], [point.x + 6, point.y + 6]];
+  const found = [];
+  for (const [layer, key] of RENAME_LAYERS) {
+    if (!map.getLayer(layer)) continue;
+    for (const h of map.queryRenderedFeatures(box, { layers: [layer] })) {
+      if (h.properties?.oid) found.push({ key, props: h.properties });
+    }
+  }
+  // Something already named is almost always what you meant.
+  return found.find((f) => f.props.zh || f.props.en) ?? found[0] ?? null;
+}
+
+function openRename(hit) {
+  const { oid, zh, en } = hit.props;
+  const o = places[oid];
+  renaming = { oid, kind: KIND[hit.key], osmZh: zh || null, osmEn: en || null };
+  const osm = [zh, en].filter(Boolean).join(' · ');
+  $('#rnTarget').innerHTML = `<span class="kind">${renaming.kind}</span><br>`
+    + (osm ? `OpenStreetMap calls this <b>${esc(osm)}</b>` : 'This one is <b>unnamed</b> in OpenStreetMap');
+  $('#rnEn').value = o?.en ?? '';
+  $('#rnZh').value = o?.zh ?? '';
+  $('#rnClear').hidden = !o;
+  $('#rename').showModal();
+}
+
+$('#rename').addEventListener('close', () => {
+  const dlg = $('#rename');
+  const r = renaming;
+  renaming = null;
+  if (!r || dlg.returnValue === 'cancel') return;
+
+  if (dlg.returnValue === 'clear') {
+    delete places[r.oid];
+  } else if (dlg.returnValue === 'ok') {
+    const en = $('#rnEn').value.trim();
+    const zh = $('#rnZh').value.trim();
+    if (!en && !zh) delete places[r.oid];
+    else places[r.oid] = { ...(en ? { en } : {}), ...(zh ? { zh } : {}) };
+  } else return;
+
+  applyLabels();
+  saveDraft();
+  refreshPublish();
+  toast(places[r.oid] ? 'Name set — publish to share it' : 'Reset to the OpenStreetMap name');
+});
+
+$('#renameMode').onclick = () => setRenameMode(!renameMode);
+
+$('#lang').onclick = () => {
+  lang = lang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem(LANG_KEY, lang);
+  applyLabels();
+  renderStops();
+};
 
 /* ---------------------------------------------------------------- chrome */
 
@@ -567,15 +755,15 @@ $('#import').onchange = async (e) => {
 };
 
 const packRoute = (r) => b64(JSON.stringify({
-  n: r.name, c: r.color, s: r.stops.map((s) => [s.lng, s.lat, s.name, s.note, s.mins, s.via ?? []]),
+  n: r.name, c: r.color, s: r.stops.map((s) => [s.lng, s.lat, s.name, s.note, s.mins, s.via ?? [], s.zh ?? '']),
 })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 function unpackRoute(s) {
   const j = JSON.parse(unb64(s.replace(/-/g, '+').replace(/_/g, '/')));
   return {
     id: uid(), name: j.n || 'Shared route', color: j.c || COLORS_[0],
-    stops: (j.s || []).map(([lng, lat, name, note, mins, via]) =>
-      ({ id: uid(), lng, lat, name: name || '', note: note || '', mins: mins ?? 10, via: via ?? [] })),
+    stops: (j.s || []).map(([lng, lat, name, note, mins, via, zh]) =>
+      ({ id: uid(), lng, lat, name: name || '', zh: zh || '', note: note || '', mins: mins ?? 10, via: via ?? [] })),
   };
 }
 
@@ -640,29 +828,35 @@ map.on('load', async () => {
   }
 
   applyMode();
-  const pub = await loadPublished();
-  publishedJson = JSON.stringify(pub);
-  routes = JSON.parse(publishedJson);
+
+  const [pubRoutes, pubPlaces] = await Promise.all([loadJson('routes', []), loadJson('places', {})]);
+  routes = Array.isArray(pubRoutes) ? pubRoutes : [];
+  places = (pubPlaces && typeof pubPlaces === 'object' && !Array.isArray(pubPlaces)) ? pubPlaces : {};
+  publishedJson = { routes: JSON.stringify(routes), places: JSON.stringify(places) };
 
   if (canBuild) {
     // An unpublished draft beats the published copy; losing edits would be worse
     // than showing stale ones, and Publish is always one click away.
-    const draft = localStorage.getItem(DRAFT_KEY);
-    if (draft && draft !== publishedJson) {
-      try {
-        const d = JSON.parse(draft);
-        if (Array.isArray(d)) { routes = d; toast('Restored unpublished changes'); }
-      } catch { /* ignore */ }
-    }
+    try {
+      const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+      if (d && (JSON.stringify(d.routes) !== publishedJson.routes
+             || JSON.stringify(d.places) !== publishedJson.places)) {
+        if (Array.isArray(d.routes)) routes = d.routes;
+        if (d.places && typeof d.places === 'object') places = d.places;
+        toast('Restored unpublished changes');
+      }
+    } catch { /* ignore */ }
     // One-time rescue of routes built before routes lived in the repo.
-    const legacy = localStorage.getItem(LEGACY_KEY);
-    if (legacy && !routes.length) {
-      try {
-        const l = JSON.parse(legacy);
-        if (Array.isArray(l) && l.length) { routes = l; toast('Imported your earlier local routes'); }
-      } catch { /* ignore */ }
-    }
+    try {
+      const l = JSON.parse(localStorage.getItem(LEGACY_KEY) || 'null');
+      if (Array.isArray(l) && l.length && !routes.length) {
+        routes = l;
+        toast('Imported your earlier local routes');
+      }
+    } catch { /* ignore */ }
   }
+
+  await loadBasemap();
 
   const hash = location.hash.match(/^#r=(.+)$/);
   if (hash) {

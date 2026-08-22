@@ -46,15 +46,46 @@ stays honest; you've only told the router which way to go.
 Reordering stops clears the via points on the affected route, since a hand-drawn detour
 between two stops means nothing once their order changes.
 
+## Language
+
+The **中 / EN** button in the header switches every label on the map — buildings, places
+and streets — plus the stop names in the panel. It's there for everyone, not just you.
+
+The point is the awkward moment on the street: switch to 中, and the destination is written
+in characters you can show to a passer-by or a driver. Stops carry a separate 中文名 field
+for exactly this, filled in automatically when you drop a stop on a mapped place, and shown
+under the English name so the Chinese is always to hand.
+
+Where OpenStreetMap has only one script, that one is used in both views rather than leaving
+a blank — 华强广场, for instance, has no English name upstream. Roughly half the named
+features here are missing one language.
+
+## Naming things yourself
+
+That gap is what **Rename** is for. Click it, then click any building, place or street, and
+give it an English name, a Chinese name, or both. Your name replaces the OpenStreetMap one
+on the published map for everyone, and shows in **amber** so you can tell your names from
+OSM's at a glance.
+
+Clicking a label picks that labelled thing; clicking bare ground picks whatever is under the
+cursor, preferring something already named over an unnamed service road. **Reset to OSM** in
+the dialog removes your override.
+
+Names are stored in `site/data/places.json`, keyed by OpenStreetMap id (`way/492615869`), and
+publish alongside routes with the same button. Because they're keyed by id, re-running
+`npm run fetch:osm` keeps them attached — unless OSM itself replaces the feature, in which
+case the name is orphaned and the OSM label returns.
+
 ## Who can edit
 
-Routes are **public** — everyone loading the site gets the same routes from
-`site/data/routes.json`, committed in this repo.
+Routes and custom names are **public** — everyone loading the site gets the same data from
+`site/data/routes.json` and `site/data/places.json`, committed in this repo.
 
 Editing is **yours alone**. The lock button asks for a GitHub fine-grained token with
 `Contents: Read and write` on this repo; without one the site is strictly read-only, with no
-add, edit, delete or publish controls. With one, the **Publish** button commits
-`routes.json` straight to `main` via the GitHub API and Pages redeploys in about a minute.
+add, edit, delete or publish controls. With one, the **Publish** button commits whichever
+of the two files changed straight to `main` via the GitHub API, and Pages redeploys in about
+a minute.
 
 The token is stored only in your browser's `localStorage`. It is never committed and never
 sent anywhere except `api.github.com`. It is a real credential: anyone with access to that
@@ -115,6 +146,7 @@ data/hqb.osm.json      raw download (24 MB, gitignored)
 site/                  ← the deployable site
   data/                basemap layers + walkgraph.json
   data/routes.json     the published routes (public read, author-only write)
+  data/places.json     your custom names, keyed by OSM id
   router.js            Dijkstra over the walking graph
   app.js               map, route model, UI
   vendor/ fonts/       MapLibre and label glyphs, vendored so nothing is fetched at runtime

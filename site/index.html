@@ -16,6 +16,7 @@
 <aside class="panel" id="panel">
   <header class="head">
     <div class="brand">华强北 <span>walking routes</span></div>
+    <button id="lang" class="icon lang" title="Showing Chinese — click for English">中</button>
     <button id="lock" class="icon" title="Editing locked">🔒</button>
     <button id="collapse" class="icon" title="Hide panel">‹</button>
   </header>
@@ -55,6 +56,7 @@
 <div class="toolbar build-only">
   <button id="addMode" class="tool">＋ Add stops</button>
   <button id="undo" class="tool ghost" title="Remove last stop">Undo</button>
+  <button id="renameMode" class="tool ghost" title="Rename a building, place or street">Rename</button>
   <span class="hint" id="hint"></span>
 </div>
 
@@ -81,6 +83,24 @@
       <button value="cancel" class="ghost">Cancel</button>
       <button value="signout" id="signout" class="ghost danger" hidden>Sign out</button>
       <button value="ok" id="authOk" class="publish">Unlock</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="rename" class="auth">
+  <form method="dialog">
+    <h2>Name this place</h2>
+    <p id="rnTarget" class="rn-target"></p>
+    <label class="rn-field">English<input id="rnEn" autocomplete="off" spellcheck="false" placeholder="e.g. Connector building" /></label>
+    <label class="rn-field">中文<input id="rnZh" autocomplete="off" spellcheck="false" placeholder="例如：接插件大楼" /></label>
+    <p class="fineprint">
+      Your name replaces the OpenStreetMap one on the map for everyone, in whichever
+      language is showing. Fill both in and the 中/EN switch works for it too.
+    </p>
+    <menu>
+      <button value="cancel" class="ghost">Cancel</button>
+      <button value="clear" id="rnClear" class="ghost danger" hidden>Reset to OSM</button>
+      <button value="ok" class="publish">Save name</button>
     </menu>
   </form>
 </dialog>
