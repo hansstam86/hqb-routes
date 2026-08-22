@@ -263,3 +263,38 @@ body.can-build .tool#renameMode { display: inline-block !important; }
 .floor .x:hover { color: var(--accent); }
 .baddrow { display: flex; gap: 6px; margin-top: 8px; }
 .baddrow button { flex: 1; }
+
+/* ---------- booths ---------- */
+.floor .fmeta { display: flex; align-items: center; gap: 2px; }
+.floor .exp {
+  border: 0; background: none; cursor: pointer; color: var(--muted);
+  font: inherit; font-size: 11px; padding: 2px 5px; border-radius: 6px; white-space: nowrap;
+}
+.floor .exp:hover { background: #f1efe9; color: var(--ink); }
+
+.booths {
+  margin: -3px 0 8px 14px; padding-left: 12px; border-left: 2px solid var(--line);
+}
+.booth {
+  display: grid; grid-template-columns: 52px 1fr auto; gap: 8px; align-items: start;
+  padding: 7px 8px; margin-bottom: 5px; border: 1px solid var(--line); border-radius: 8px; background: #fdfdfc;
+}
+.booth .code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; font-weight: 700;
+  text-align: center; padding: 3px 0; background: #efece4; border-radius: 5px; color: var(--ink);
+}
+.booth input { width: 100%; font: inherit; border: 0; padding: 1px 0; background: none; color: var(--ink); }
+.booth .bcode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; font-weight: 700;
+  text-align: center; background: #efece4; border-radius: 5px; padding: 3px 2px;
+}
+.booth .ben { font-weight: 600; font-size: 13px; }
+.booth .bzh { font-size: 12px; color: var(--muted); }
+.booth .bnote, .booth .bnote-ro { font-size: 11.5px; color: var(--muted); }
+.booth .bnote-ro { margin-top: 2px; font-style: italic; }
+.booth .ro-en { font-weight: 600; font-size: 13px; }
+.booth .ro-zh { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.booth .x { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 2px; }
+.booth .x:hover { color: var(--accent); }
+.addbooth { width: 100%; margin-bottom: 6px; }
+.booths .bempty { margin: 2px 0 6px; }

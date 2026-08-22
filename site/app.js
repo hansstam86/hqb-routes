@@ -901,6 +901,7 @@ $('#lang').onclick = () => {
 
 let bSelected = null;
 let bQuery = '';
+const bOpen = new Set();       // "<oid>:<floorId>" of expanded floors
 
 // B2 < B1 < 1F < 2F, so the list reads the way you'd walk it.
 function levelOrder(l) {
@@ -912,13 +913,37 @@ function levelOrder(l) {
   if (t === 'G' || t === 'GF') return 0;
   return 99;
 }
+
+// Older entries predate floor ids and booths; heal them rather than special-case
+// every read site.
+function normalizeBuildings() {
+  for (const b of Object.values(buildings)) {
+    for (const f of b?.floors ?? []) {
+      f.id ??= uid().slice(0, 8);
+      f.booths ??= [];
+    }
+  }
+}
+
 const sortedFloors = (oid) =>
   [...(buildings[oid]?.floors ?? [])].sort((a, b) => levelOrder(a.level) - levelOrder(b.level));
 
-function floorsMatching(oid, q) {
-  const floors = sortedFloors(oid);
-  if (!q) return floors;
-  return floors.filter((f) => `${f.en} ${f.zh}`.toLowerCase().includes(q));
+const boothText = (b) => `${b.code || ''} ${b.en || ''} ${b.zh || ''} ${b.note || ''}`.toLowerCase();
+const floorText = (f) => `${f.en || ''} ${f.zh || ''}`.toLowerCase();
+const pick = (en, zh) => (lang === 'zh' ? (zh || en) : (en || zh)) || '';
+
+/* One flat list of hits so a search can answer "which booth", not just "which floor". */
+function searchDirectories(q) {
+  const hits = [];
+  for (const oid of Object.keys(buildings)) {
+    for (const f of sortedFloors(oid)) {
+      // Floor and booth hits both count: "3F is all connectors" and "booth 3C21
+      // specifically" answer different questions, and suppressing either loses one.
+      if (floorText(f).includes(q)) hits.push({ oid, floor: f, booth: null });
+      for (const b of f.booths ?? []) if (boothText(b).includes(q)) hits.push({ oid, floor: f, booth: b });
+    }
+  }
+  return hits;
 }
 
 function showTab(name) {
@@ -936,125 +961,189 @@ function selectBuilding(oid) {
 }
 
 function renderBuildings() {
+  normalizeBuildings();
   const el = $('#bBody');
   const q = bQuery.trim().toLowerCase();
   el.innerHTML = '';
 
-  // Searching looks across every directory at once: the point is to find which
-  // building and which floor, not to browse one you already know.
-  if (q) {
-    const hits = Object.keys(buildings)
-      .map((oid) => ({ oid, floors: floorsMatching(oid, q) }))
-      .filter((h) => h.floors.length);
-    $('#bHint').textContent = hits.length
-      ? `${hits.reduce((a, h) => a + h.floors.length, 0)} floor(s) in ${hits.length} building(s)`
-      : '';
-    if (!hits.length) {
-      el.innerHTML = `<p class="bempty">Nothing recorded for <b>${esc(bQuery)}</b> yet.</p>`;
-      return;
-    }
-    const list = document.createElement('div');
-    list.className = 'blist';
-    for (const h of hits) {
-      for (const f of h.floors) {
-        const btn = document.createElement('button');
-        btn.innerHTML = `<span class="bn">${esc(nameOf(h.oid))}</span>`
-          + `<span class="hit">${esc(f.level)}</span>`
-          + `<span class="bf">${esc(lang === 'zh' ? (f.zh || f.en) : (f.en || f.zh))}</span>`;
-        btn.onclick = () => { bQuery = ''; $('#bSearch').value = ''; selectBuilding(h.oid); };
-        list.append(btn);
-      }
-    }
-    el.append(list);
+  if (q) return renderSearch(el, q);
+  if (!bSelected) return renderIndex(el);
+  return renderBuilding(el, bSelected);
+}
+
+function renderSearch(el, q) {
+  const hits = searchDirectories(q);
+  $('#bHint').textContent = hits.length ? `${hits.length} match(es)` : '';
+  if (!hits.length) {
+    el.innerHTML = `<p class="bempty">Nothing recorded for <b>${esc(bQuery)}</b> yet.</p>`;
     return;
   }
+  const list = document.createElement('div');
+  list.className = 'blist';
+  for (const h of hits) {
+    const btn = document.createElement('button');
+    const what = h.booth ? pick(h.booth.en, h.booth.zh) : pick(h.floor.en, h.floor.zh);
+    btn.innerHTML = `<span class="bn">${esc(nameOf(h.oid))}</span>`
+      + `<span class="hit">${esc(h.floor.level)}${h.booth?.code ? ` · ${esc(h.booth.code)}` : ''}</span>`
+      + `<span class="bf">${esc(what)}</span>`;
+    btn.onclick = () => {
+      bQuery = ''; $('#bSearch').value = '';
+      bOpen.add(`${h.oid}:${h.floor.id}`);
+      selectBuilding(h.oid);
+    };
+    list.append(btn);
+  }
+  el.append(list);
+}
 
-  // No search: either one building's directory, or the index of what exists.
-  if (!bSelected) {
-    const keys = Object.keys(buildings).filter((k) => buildings[k]?.floors?.length);
-    $('#bHint').textContent = keys.length ? `${keys.length} building(s) mapped` : '';
-    if (!keys.length) {
-      el.innerHTML = `<p class="bempty">${canBuild
-        ? 'Click any building on the map to record what\u2019s sold on each floor.'
-        : 'No building directories published yet.'}</p>`;
-      return;
-    }
-    const list = document.createElement('div');
-    list.className = 'blist';
-    for (const oid of keys.sort((a, b) => nameOf(a).localeCompare(nameOf(b)))) {
-      const btn = document.createElement('button');
-      btn.innerHTML = `<span class="bn">${esc(nameOf(oid))}</span>`
-        + `<span class="bf">${buildings[oid].floors.length} floors</span>`;
-      btn.onclick = () => selectBuilding(oid);
-      list.append(btn);
-    }
-    el.append(list);
+function renderIndex(el) {
+  const keys = Object.keys(buildings).filter((k) => buildings[k]?.floors?.length);
+  $('#bHint').textContent = keys.length ? `${keys.length} building(s) mapped` : '';
+  if (!keys.length) {
+    el.innerHTML = `<p class="bempty">${canBuild
+      ? 'Click any building on the map to record what\u2019s sold on each floor.'
+      : 'No building directories published yet.'}</p>`;
     return;
   }
+  const list = document.createElement('div');
+  list.className = 'blist';
+  for (const oid of keys.sort((a, b) => nameOf(a).localeCompare(nameOf(b)))) {
+    const floors = buildings[oid].floors;
+    const booths = floors.reduce((a, f) => a + (f.booths?.length ?? 0), 0);
+    const btn = document.createElement('button');
+    btn.innerHTML = `<span class="bn">${esc(nameOf(oid))}</span>`
+      + `<span class="bf">${floors.length} floors${booths ? ` · ${booths} booths` : ''}</span>`;
+    btn.onclick = () => selectBuilding(oid);
+    list.append(btn);
+  }
+  el.append(list);
+}
 
-  const oid = bSelected;
+function renderBuilding(el, oid) {
   const other = otherNameOf(oid);
   const card = document.createElement('div');
   card.className = 'bcard';
-  card.innerHTML = `<h3>${esc(nameOf(oid))}</h3>`
-    + (other ? `<div class="sub">${esc(other)}</div>` : '<div class="sub"></div>');
+  card.innerHTML = `<h3>${esc(nameOf(oid))}</h3><div class="sub">${esc(other)}</div>`;
   el.append(card);
 
   const floors = sortedFloors(oid);
-  $('#bHint').textContent = floors.length ? `${floors.length} floor(s)` : '';
+  const booths = floors.reduce((a, f) => a + (f.booths?.length ?? 0), 0);
+  $('#bHint').textContent = floors.length
+    ? `${floors.length} floor(s)${booths ? `, ${booths} booth(s)` : ''}` : '';
 
   if (!floors.length && !canBuild) {
-    el.innerHTML += '<p class="bempty">Nothing recorded for this building yet.</p>';
+    el.insertAdjacentHTML('beforeend', '<p class="bempty">Nothing recorded for this building yet.</p>');
   }
 
-  for (const f of floors) {
-    const row = document.createElement('div');
-    row.className = 'floor';
+  for (const f of floors) el.append(...floorNodes(oid, f));
+
+  const foot = document.createElement('div');
+  foot.className = 'baddrow';
+  foot.innerHTML = (canBuild ? '<button class="ghost" id="bAdd">+ Add floor</button>' : '')
+    + '<button class="ghost" id="bBack">All buildings</button>';
+  el.append(foot);
+  if (canBuild) {
+    foot.querySelector('#bAdd').onclick = () => {
+      buildings[oid] ??= { floors: [] };
+      buildings[oid].floors.push({ id: uid().slice(0, 8), level: '', en: '', zh: '', booths: [] });
+      touchBuildings(true);
+    };
+  }
+  foot.querySelector('#bBack').onclick = () => { bSelected = null; renderBuildings(); };
+}
+
+function floorNodes(oid, f) {
+  const key = `${oid}:${f.id}`;
+  const open = bOpen.has(key);
+  const n = f.booths?.length ?? 0;
+  const nodes = [];
+
+  const row = document.createElement('div');
+  row.className = 'floor';
+  const toggle = (canBuild || n)
+    ? `<button class="exp" title="Booths on this floor">${open ? '▾' : '▸'} ${n || 'add'}</button>` : '';
+
+  if (canBuild) {
+    row.innerHTML = `
+      <input class="lvlin" value="${esc(f.level)}" placeholder="3F" autocomplete="off" />
+      <div>
+        <input class="fen" value="${esc(f.en)}" placeholder="What's sold on this floor" autocomplete="off" />
+        <input class="fzh" value="${esc(f.zh)}" placeholder="中文" autocomplete="off" />
+      </div>
+      <div class="fmeta">${toggle}<button class="x" title="Remove floor">×</button></div>`;
+    row.querySelector('.lvlin').oninput = (e) => { f.level = e.target.value; touchBuildings(false); };
+    row.querySelector('.fen').oninput = (e) => { f.en = e.target.value; touchBuildings(false); };
+    row.querySelector('.fzh').oninput = (e) => { f.zh = e.target.value; touchBuildings(false); };
+    row.querySelector('.x').onclick = () => {
+      buildings[oid].floors = buildings[oid].floors.filter((x) => x !== f);
+      bOpen.delete(key);
+      touchBuildings(true);
+    };
+  } else {
+    row.innerHTML = `
+      <div class="lvl">${esc(f.level)}</div>
+      <div>
+        <div class="ro-en">${esc(pick(f.en, f.zh))}</div>
+        ${(lang === 'zh' ? f.en : f.zh) ? `<div class="ro-zh">${esc(lang === 'zh' ? f.en : f.zh)}</div>` : ''}
+      </div>
+      <div class="fmeta">${toggle}</div>`;
+  }
+  row.querySelector('.exp')?.addEventListener('click', () => {
+    if (open) bOpen.delete(key); else bOpen.add(key);
+    renderBuildings();
+  });
+  nodes.push(row);
+
+  if (!open) return nodes;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'booths';
+  for (const b of f.booths ?? []) {
+    const bo = document.createElement('div');
+    bo.className = 'booth';
     if (canBuild) {
-      row.innerHTML = `
-        <input class="lvlin" value="${esc(f.level)}" placeholder="3F" autocomplete="off" />
+      bo.innerHTML = `
+        <input class="bcode" value="${esc(b.code)}" placeholder="3C21" autocomplete="off" />
         <div>
-          <input class="fen" value="${esc(f.en)}" placeholder="What's sold here" autocomplete="off" />
-          <input class="fzh" value="${esc(f.zh)}" placeholder="中文" autocomplete="off" />
+          <input class="ben" value="${esc(b.en)}" placeholder="What this booth sells" autocomplete="off" />
+          <input class="bzh" value="${esc(b.zh)}" placeholder="中文" autocomplete="off" />
+          <input class="bnote" value="${esc(b.note)}" placeholder="Contact, prices, who to ask…" autocomplete="off" />
         </div>
-        <button class="x" title="Remove floor">×</button>`;
-      row.querySelector('.lvlin').oninput = (e) => { f.level = e.target.value; touchBuildings(false); };
-      row.querySelector('.fen').oninput = (e) => { f.en = e.target.value; touchBuildings(false); };
-      row.querySelector('.fzh').oninput = (e) => { f.zh = e.target.value; touchBuildings(false); };
-      row.querySelector('.x').onclick = () => {
-        buildings[oid].floors = buildings[oid].floors.filter((x) => x !== f);
+        <button class="x" title="Remove booth">×</button>`;
+      bo.querySelector('.bcode').oninput = (e) => { b.code = e.target.value; touchBuildings(false); };
+      bo.querySelector('.ben').oninput = (e) => { b.en = e.target.value; touchBuildings(false); };
+      bo.querySelector('.bzh').oninput = (e) => { b.zh = e.target.value; touchBuildings(false); };
+      bo.querySelector('.bnote').oninput = (e) => { b.note = e.target.value; touchBuildings(false); };
+      bo.querySelector('.x').onclick = () => {
+        f.booths = f.booths.filter((x) => x !== b);
         touchBuildings(true);
       };
     } else {
-      row.innerHTML = `
-        <div class="lvl">${esc(f.level)}</div>
+      bo.innerHTML = `
+        <div class="code">${esc(b.code) || '—'}</div>
         <div>
-          <div class="ro-en">${esc(lang === 'zh' ? (f.zh || f.en) : (f.en || f.zh))}</div>
-          ${(lang === 'zh' ? f.en : f.zh) ? `<div class="ro-zh">${esc(lang === 'zh' ? f.en : f.zh)}</div>` : ''}
+          <div class="ro-en">${esc(pick(b.en, b.zh))}</div>
+          ${(lang === 'zh' ? b.en : b.zh) ? `<div class="ro-zh">${esc(lang === 'zh' ? b.en : b.zh)}</div>` : ''}
+          ${b.note ? `<div class="bnote-ro">${esc(b.note)}</div>` : ''}
         </div><div></div>`;
     }
-    el.append(row);
+    wrap.append(bo);
   }
-
   if (canBuild) {
-    const add = document.createElement('div');
-    add.className = 'baddrow';
-    add.innerHTML = '<button class="ghost" id="bAdd">+ Add floor</button>'
-      + '<button class="ghost" id="bBack">All buildings</button>';
-    el.append(add);
-    add.querySelector('#bAdd').onclick = () => {
-      buildings[oid] ??= { floors: [] };
-      buildings[oid].floors.push({ level: '', en: '', zh: '' });
+    const add = document.createElement('button');
+    add.className = 'ghost addbooth';
+    add.textContent = '+ Add booth';
+    add.onclick = () => {
+      f.booths ??= [];
+      f.booths.push({ id: uid().slice(0, 8), code: '', en: '', zh: '', note: '' });
       touchBuildings(true);
     };
-    add.querySelector('#bBack').onclick = () => { bSelected = null; renderBuildings(); };
-  } else {
-    const back = document.createElement('div');
-    back.className = 'baddrow';
-    back.innerHTML = '<button class="ghost" id="bBack">All buildings</button>';
-    el.append(back);
-    back.querySelector('#bBack').onclick = () => { bSelected = null; renderBuildings(); };
+    wrap.append(add);
+  } else if (!(f.booths ?? []).length) {
+    wrap.insertAdjacentHTML('beforeend', '<p class="bempty">No booths listed for this floor.</p>');
   }
+  nodes.push(wrap);
+  return nodes;
 }
 
 /* Re-render only when the shape changed; typing shouldn't steal focus. */

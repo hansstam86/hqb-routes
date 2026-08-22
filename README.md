@@ -100,15 +100,29 @@ level (`B1`, `1F`, `3F`), what's sold on it, and the Chinese for the same. Floor
 you'd walk them — B2, B1, 1F, 2F — regardless of the order you type them in. Buildings with a
 directory are tinted **gold** on the map, so you can see at a glance which ones you've done.
 
-The search box is the point of all this. Type `connectors` or `线材` and it searches every
-directory at once, returning the building *and the floor*:
+### Booths
+
+Each floor expands to a list of booths — the toggle on the right of the floor row. A booth has
+its **code** (`3C21`), what it sells in both scripts, and a free note for the things that
+actually matter on the day: who to ask, what they quoted, minimum order.
+
+That's the level people can act on. "3F is connectors" gets someone to the right floor;
+"3C21, ask for the guy at the back" gets them to the right stall.
+
+### Finding things
+
+The search box is the point of all this. Type `connectors`, `线材`, `3H09`, or a name from a
+note, and it searches every directory at once — floors *and* booths:
 
 ```
-SEG Plaza    3F    Connectors, cables, wire
+SEG Plaza   3F           Connectors, cables, wire
+SEG Plaza   3F · 3C21    USB-C connectors
 ```
 
-Click a result to jump there. It matches both scripts, so you can search in whichever you
-were thinking in.
+Floor and booth matches both show, because "the whole floor is connectors" and "this one
+booth" answer different questions. Click a result and it jumps to the building with that
+floor already open. It matches both scripts and booth codes, so you can search however you
+were thinking about it.
 
 Directories live in `site/data/buildings.json`, keyed by OpenStreetMap id like the names, and
 publish with the same button. Visitors get a read-only directory board; only you see the
