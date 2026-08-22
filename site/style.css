@@ -203,3 +203,6 @@ body.can-build .toolbar.build-only { display: flex !important; }
 .stop .zh { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
 body.can-build .tool#renameMode { display: inline-block !important; }
 .stop .zhin { font-size: 12.5px; color: var(--muted); font-weight: 500; }
+.rn-field select { width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; font-size: 13px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink);
+  text-transform: none; letter-spacing: normal; }

@@ -62,19 +62,33 @@ features here are missing one language.
 
 ## Naming things yourself
 
-That gap is what **Rename** is for. Click it, then click any building, place or street, and
-give it an English name, a Chinese name, or both. Your name replaces the OpenStreetMap one
-on the published map for everyone, and shows in **amber** so you can tell your names from
-OSM's at a glance.
+That gap is what the **Names** tool is for. Turn it on, then click anything on the map.
+Your names show in **amber**, so you can always tell yours from OpenStreetMap's.
+
+| Click | What you get |
+|---|---|
+| A building, place or street | Rename it, or **Hide this name** to take the label off the map |
+| One of your own names | Edit it, or **Delete** it outright |
+| Empty ground | **Add a name** where OpenStreetMap has nothing at all |
+
+Names you add from scratch sit where you clicked and can be dragged to reposition while the
+tool is on. Each is tagged as a place, a building or a street, which sets how it's drawn.
+
+**Hiding** is how you delete a name you don't want — an OSM label that's wrong, stale or just
+clutter. Hidden names don't vanish on you: while the Names tool is on they stay visible in
+**grey** so you can click one and bring it back with **Reset to OSM**. Visitors never see
+them. Anything you've already touched wins the click over anything else under the cursor,
+so your own edits are always reachable again.
 
 Clicking a label picks that labelled thing; clicking bare ground picks whatever is under the
-cursor, preferring something already named over an unnamed service road. **Reset to OSM** in
-the dialog removes your override.
+cursor, preferring something already named over an unnamed service road.
 
-Names are stored in `site/data/places.json`, keyed by OpenStreetMap id (`way/492615869`), and
-publish alongside routes with the same button. Because they're keyed by id, re-running
-`npm run fetch:osm` keeps them attached — unless OSM itself replaces the feature, in which
-case the name is orphaned and the OSM label returns.
+Names live in `site/data/places.json`, keyed by OpenStreetMap id (`way/492615869`) for
+overrides and by a generated `custom/…` id for ones you add. They publish alongside routes
+with the same button. Because overrides are keyed by id, re-running `npm run fetch:osm`
+keeps them attached — unless OSM replaces the feature, in which case the override is
+orphaned and the OSM label returns. Names you added yourself carry their own coordinates and
+are unaffected.
 
 ## Who can edit
 
@@ -146,7 +160,7 @@ data/hqb.osm.json      raw download (24 MB, gitignored)
 site/                  ← the deployable site
   data/                basemap layers + walkgraph.json
   data/routes.json     the published routes (public read, author-only write)
-  data/places.json     your custom names, keyed by OSM id
+  data/places.json     your names: overrides, hidden labels, and ones you added
   router.js            Dijkstra over the walking graph
   app.js               map, route model, UI
   vendor/ fonts/       MapLibre and label glyphs, vendored so nothing is fetched at runtime

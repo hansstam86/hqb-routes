@@ -30,6 +30,7 @@ const style = {
     pois: { type: 'geojson', data: EMPTY, attribution: OSM_ATTRIB },
     route: { type: 'geojson', data: EMPTY },
     vias: { type: 'geojson', data: EMPTY },
+    customs: { type: 'geojson', data: EMPTY },
   },
   layers: [
     { id: 'bg', type: 'background', paint: { 'background-color': '#f1efe9' } },
@@ -68,14 +69,14 @@ const style = {
         'text-font': ['Noto Sans Regular'], 'text-size': ['interpolate', ['linear'], ['zoom'], 15, 10, 19, 12.5],
         'symbol-spacing': 260, 'text-max-angle': 32, 'text-padding': 4,
       },
-      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 1], '#b45309', '#6f6757'],
+      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 2], '#b0a89a', ['==', ['get', 'custom'], 1], '#b45309', '#6f6757'],
         'text-halo-color': '#f1efe9', 'text-halo-width': 1.6 } },
 
     { id: 'building-label', type: 'symbol', source: 'buildings', minzoom: 17,
       filter: ['all', ['has', 'label'], ['!=', ['get', 'isMall'], 1]],
       layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'],
         'text-size': 10.5, 'text-max-width': 8, 'text-padding': 4 },
-      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 1], '#b45309', '#7a715f'],
+      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 2], '#b0a89a', ['==', ['get', 'custom'], 1], '#b45309', '#7a715f'],
         'text-halo-color': '#f1efe9', 'text-halo-width': 1.5 } },
 
     { id: 'poi-label', type: 'symbol', source: 'pois', minzoom: 16,
@@ -83,13 +84,13 @@ const style = {
       layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Regular'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 16, 10, 19, 12.5],
         'text-offset': [0, .9], 'text-anchor': 'top', 'text-max-width': 7, 'text-padding': 3 },
-      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 1], '#b45309', '#5f5748'],
+      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 2], '#b0a89a', ['==', ['get', 'custom'], 1], '#b45309', '#5f5748'],
         'text-halo-color': '#f6f5f2', 'text-halo-width': 1.4 } },
     { id: 'mall-label', type: 'symbol', source: 'pois', minzoom: 14,
       filter: ['all', ['has', 'label'], ['in', ['get', 'cls'], ['literal', ['mall', 'station', 'electronics']]]],
       layout: { 'text-field': ['get', 'label'], 'text-font': ['Noto Sans Bold'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 14, 11, 19, 14.5], 'text-max-width': 8, 'text-padding': 4 },
-      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 1], '#b45309', '#4c4438'],
+      paint: { 'text-color': ['case', ['==', ['get', 'custom'], 2], '#b0a89a', ['==', ['get', 'custom'], 1], '#b45309', '#4c4438'],
         'text-halo-color': '#f6f5f2', 'text-halo-width': 1.8 } },
 
     // The walked line: a white casing under a coloured core reads clearly over any background.
@@ -107,6 +108,20 @@ const style = {
     { id: 'route-hit', type: 'line', source: 'route',
       layout: { 'line-cap': 'round' },
       paint: { 'line-color': '#000', 'line-opacity': 0, 'line-width': 22 } },
+    // Names you've added for things OpenStreetMap doesn't have at all.
+    { id: 'custom-anchor', type: 'circle', source: 'customs',
+      layout: { visibility: 'none' },
+      paint: { 'circle-radius': 4.5, 'circle-color': '#fff', 'circle-stroke-color': '#b45309', 'circle-stroke-width': 2 } },
+    { id: 'custom-label', type: 'symbol', source: 'customs',
+      filter: ['has', 'label'],
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-font': ['Noto Sans Bold'],
+        'text-size': ['match', ['get', 'kind'], 'street', 11, 'building', 11.5, 13],
+        'text-offset': [0, 0.75], 'text-anchor': 'top', 'text-max-width': 8, 'text-padding': 3,
+      },
+      paint: { 'text-color': '#b45309', 'text-halo-color': '#f1efe9', 'text-halo-width': 1.8 } },
+
     // Handles for the bends you've added by hand.
     { id: 'via-dot', type: 'circle', source: 'vias',
       paint: {
@@ -252,6 +267,22 @@ function refreshPublish() {
    the source. Custom names are tinted so you can see which ones are yours. */
 
 const pickName = (zh, en) => (lang === 'zh' ? (zh || en) : (en || zh)) || null;
+const isCustomId = (k) => k.startsWith('custom/');
+
+// Names with their own coordinates: things OSM has no feature for.
+function drawCustoms() {
+  const features = [];
+  for (const [id, v] of Object.entries(places)) {
+    if (!isCustomId(id) || !Array.isArray(v.at)) continue;
+    const label = pickName(v.zh, v.en);
+    features.push({
+      type: 'Feature',
+      properties: { id, kind: v.kind || 'place', ...(label ? { label } : {}) },
+      geometry: { type: 'Point', coordinates: v.at },
+    });
+  }
+  map.getSource('customs')?.setData({ type: 'FeatureCollection', features });
+}
 
 function applyLabels() {
   for (const key of ['buildings', 'roads', 'pois']) {
@@ -260,12 +291,16 @@ function applyLabels() {
     for (const f of fc.features) {
       const p = f.properties;
       const o = places[p.oid];
-      const label = pickName(o?.zh || p.zh, o?.en || p.en);
+      // Hidden names stay visible (greyed) while the Names tool is on, otherwise
+      // hiding one would be irreversible: there'd be nothing left to click.
+      const osmName = pickName(p.zh, p.en);
+      const label = o?.hidden ? (renameMode ? osmName : null) : pickName(o?.zh || p.zh, o?.en || p.en);
       if (label) p.label = label; else delete p.label;
-      p.custom = o ? 1 : 0;
+      p.custom = o?.hidden ? 2 : (o ? 1 : 0);
     }
     map.getSource(key)?.setData(fc);
   }
+  drawCustoms();
   $('#lang').textContent = lang === 'zh' ? '中' : 'EN';
   $('#lang').title = lang === 'zh' ? 'Showing Chinese — click for English' : 'Showing English — click for Chinese';
 }
@@ -607,10 +642,11 @@ function setAddMode(on) {
 
 map.on('click', (e) => {
   if (renameMode && canBuild) {
+    const mine = pickCustom(e.point);
+    if (mine) return openCustom(mine);
     const hit = pickFeature(e.point);
-    if (hit) openRename(hit);
-    else toast('Nothing nameable there — try a building, a shop dot or a street');
-    return;
+    if (hit) return openOsm(hit);
+    return openNew(e.lngLat);
   }
   if (!addMode || !canBuild) return;
   const r = active() ?? newRoute();
@@ -635,7 +671,7 @@ map.on('click', (e) => {
    fields are offered and the language switch falls back to whichever exists. */
 
 const KIND = { pois: 'place', roads: 'street', buildings: 'building' };
-let renaming = null;   // { oid, kind, osmZh, osmEn }
+let renaming = null;   // { mode:'osm'|'custom'|'new', ... }
 
 function setRenameMode(on) {
   renameMode = on && canBuild;
@@ -643,9 +679,12 @@ function setRenameMode(on) {
   $('#renameMode').classList.toggle('on', renameMode);
   $('#addMode').classList.toggle('on', addMode);
   $('#hint').textContent = renameMode
-    ? 'Click a building, place or street to name it'
+    ? 'Click a name to edit it, or empty space to add one'
     : (addMode ? 'Click the map to drop stops in order' : 'Drag the line to bend it');
   map.getCanvas().style.cursor = renameMode ? 'help' : (addMode ? 'crosshair' : '');
+  // The anchors are editing furniture; visitors never see them.
+  map.setLayoutProperty('custom-anchor', 'visibility', renameMode ? 'visible' : 'none');
+  applyLabels();   // hidden names appear/disappear with the tool
 }
 
 // Label layers come first: clicking the words "SEG Plaza" should pick SEG Plaza,
@@ -655,51 +694,143 @@ const RENAME_LAYERS = [
   ['poi', 'pois'], ['road-hit', 'roads'], ['buildings', 'buildings'],
 ];
 
+const boxAt = (point, r = 6) => [[point.x - r, point.y - r], [point.x + r, point.y + r]];
+
+function pickCustom(point) {
+  for (const layer of ['custom-label', 'custom-anchor']) {
+    if (!map.getLayer(layer)) continue;
+    const f = map.queryRenderedFeatures(boxAt(point, 10), { layers: [layer] })[0];
+    if (f?.properties?.id) return f.properties.id;
+  }
+  return null;
+}
+
 function pickFeature(point) {
-  const box = [[point.x - 6, point.y - 6], [point.x + 6, point.y + 6]];
   const found = [];
   for (const [layer, key] of RENAME_LAYERS) {
     if (!map.getLayer(layer)) continue;
-    for (const h of map.queryRenderedFeatures(box, { layers: [layer] })) {
+    for (const h of map.queryRenderedFeatures(boxAt(point), { layers: [layer] })) {
       if (h.properties?.oid) found.push({ key, props: h.properties });
     }
   }
-  // Something already named is almost always what you meant.
-  return found.find((f) => f.props.zh || f.props.en) ?? found[0] ?? null;
+  // Anything you've already given a name to -- or hidden -- wins, so your own
+  // edits are always reachable again. Then anything named. Then whatever's there.
+  return found.find((f) => places[f.props.oid])
+    ?? found.find((f) => f.props.zh || f.props.en)
+    ?? found[0] ?? null;
 }
 
-function openRename(hit) {
+function showDialog({ title, target, note, kind, en, zh, showKind, hide, clear, del }) {
+  $('#rnTitle').textContent = title;
+  $('#rnTarget').innerHTML = target;
+  $('#rnNote').textContent = note;
+  $('#rnKindWrap').hidden = !showKind;
+  $('#rnKind').value = kind || 'place';
+  $('#rnEn').value = en ?? '';
+  $('#rnZh').value = zh ?? '';
+  $('#rnHide').hidden = !hide;
+  $('#rnClear').hidden = !clear;
+  $('#rnDelete').hidden = !del;
+  $('#rename').showModal();
+}
+
+function openOsm(hit) {
   const { oid, zh, en } = hit.props;
   const o = places[oid];
-  renaming = { oid, kind: KIND[hit.key], osmZh: zh || null, osmEn: en || null };
+  renaming = { mode: 'osm', oid, kind: KIND[hit.key] };
   const osm = [zh, en].filter(Boolean).join(' · ');
-  $('#rnTarget').innerHTML = `<span class="kind">${renaming.kind}</span><br>`
-    + (osm ? `OpenStreetMap calls this <b>${esc(osm)}</b>` : 'This one is <b>unnamed</b> in OpenStreetMap');
-  $('#rnEn').value = o?.en ?? '';
-  $('#rnZh').value = o?.zh ?? '';
-  $('#rnClear').hidden = !o;
-  $('#rename').showModal();
+  showDialog({
+    title: 'Name this place',
+    target: `<span class="kind">${renaming.kind}</span><br>`
+      + (osm ? `OpenStreetMap calls this <b>${esc(osm)}</b>` : 'This one is <b>unnamed</b> in OpenStreetMap')
+      + (o?.hidden ? '<br><b>Its name is currently hidden.</b>' : ''),
+    note: 'Your name replaces the OpenStreetMap one for everyone. Hide it instead to show no '
+      + 'label at all, which is the way to clear a name you do not want on the map.',
+    en: o?.hidden ? '' : o?.en, zh: o?.hidden ? '' : o?.zh,
+    hide: !o?.hidden, clear: !!o,
+  });
+}
+
+function openCustom(id) {
+  const v = places[id];
+  if (!v) return;
+  renaming = { mode: 'custom', oid: id, at: v.at };
+  showDialog({
+    title: 'Edit this name',
+    target: '<span class="kind">your own name</span><br>Not from OpenStreetMap — you added this one.',
+    note: 'Delete removes it from the map entirely.',
+    showKind: true, kind: v.kind, en: v.en, zh: v.zh, del: true,
+  });
+}
+
+function openNew(lngLat) {
+  renaming = { mode: 'new', at: [+lngLat.lng.toFixed(6), +lngLat.lat.toFixed(6)] };
+  showDialog({
+    title: 'Add a name here',
+    target: '<span class="kind">new name</span><br>Nothing of OpenStreetMap\u2019s is here, so this '
+      + 'will be a name of your own.',
+    note: 'It sits where you clicked. Drag it later while the Names tool is on.',
+    showKind: true, kind: 'place',
+  });
 }
 
 $('#rename').addEventListener('close', () => {
   const dlg = $('#rename');
   const r = renaming;
   renaming = null;
-  if (!r || dlg.returnValue === 'cancel') return;
+  if (!r || dlg.returnValue === 'cancel' || !dlg.returnValue) return;
 
-  if (dlg.returnValue === 'clear') {
+  const en = $('#rnEn').value.trim();
+  const zh = $('#rnZh').value.trim();
+  let msg = '';
+
+  if (dlg.returnValue === 'hide' && r.mode === 'osm') {
+    places[r.oid] = { hidden: true };
+    msg = 'Name hidden';
+  } else if (dlg.returnValue === 'clear' && r.mode === 'osm') {
     delete places[r.oid];
+    msg = 'Reset to the OpenStreetMap name';
+  } else if (dlg.returnValue === 'delete' && r.mode === 'custom') {
+    delete places[r.oid];
+    msg = 'Name deleted';
   } else if (dlg.returnValue === 'ok') {
-    const en = $('#rnEn').value.trim();
-    const zh = $('#rnZh').value.trim();
-    if (!en && !zh) delete places[r.oid];
-    else places[r.oid] = { ...(en ? { en } : {}), ...(zh ? { zh } : {}) };
+    if (r.mode === 'osm') {
+      if (!en && !zh) { delete places[r.oid]; msg = 'Reset to the OpenStreetMap name'; }
+      else { places[r.oid] = { ...(en ? { en } : {}), ...(zh ? { zh } : {}) }; msg = 'Name set'; }
+    } else {
+      if (!en && !zh) { toast('Give it a name in at least one language'); return; }
+      const id = r.mode === 'custom' ? r.oid : `custom/${uid().slice(0, 8)}`;
+      places[id] = { ...(en ? { en } : {}), ...(zh ? { zh } : {}), at: r.at, kind: $('#rnKind').value };
+      msg = r.mode === 'custom' ? 'Name updated' : 'Name added';
+    }
   } else return;
 
   applyLabels();
   saveDraft();
   refreshPublish();
-  toast(places[r.oid] ? 'Name set — publish to share it' : 'Reset to the OpenStreetMap name');
+  toast(`${msg} — publish to share it`);
+});
+
+/* Drag one of your own names to reposition it. */
+let dragName = null;
+map.on('mousedown', 'custom-anchor', (e) => {
+  if (!renameMode || !canBuild) return;
+  e.preventDefault();
+  dragName = e.features[0].properties.id;
+  map.getCanvas().style.cursor = 'grabbing';
+});
+map.on('mousemove', (e) => {
+  if (!dragName) return;
+  const v = places[dragName];
+  if (v) { v.at = [+e.lngLat.lng.toFixed(6), +e.lngLat.lat.toFixed(6)]; drawCustoms(); }
+});
+// On the document, so releasing off-map cannot strand the drag.
+document.addEventListener('mouseup', () => {
+  if (!dragName) return;
+  dragName = null;
+  map.getCanvas().style.cursor = renameMode ? 'help' : '';
+  saveDraft();
+  refreshPublish();
 });
 
 $('#renameMode').onclick = () => setRenameMode(!renameMode);
