@@ -4,7 +4,7 @@ A route builder for Huaqiangbei, Shenzhen. Drop stops on the map in order; the l
 follows the real footpath network, so the distance is what you'll actually walk rather
 than a straight line through buildings.
 
-**Live site:** _(fill in once deployed)_
+**Live site:** https://hansstam86.github.io/hqb-routes/
 
 ```bash
 npm run dev     # http://127.0.0.1:5180
