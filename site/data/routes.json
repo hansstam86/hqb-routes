@@ -1,8 +1,20 @@
 [
   {
     "id": "2253f6dc-2194-4e07-8106-cf38d82616d3",
-    "name": "Route 1",
-    "color": "#c81e3a",
+    "name": "Tech and Trendy play experience",
+    "color": "#1d4ed8",
+    "stops": []
+  },
+  {
+    "id": "8c01fe0b-b474-4492-97e1-764d55e88a78",
+    "name": "Electronics Industry Exploration",
+    "color": "#047857",
+    "stops": []
+  },
+  {
+    "id": "81ef1a67-bb90-4572-a178-07c35d2e20e2",
+    "name": "Smart Consumer Experience",
+    "color": "#b45309",
     "stops": []
   }
 ]
