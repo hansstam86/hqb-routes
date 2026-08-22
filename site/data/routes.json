@@ -3,7 +3,58 @@
     "id": "2253f6dc-2194-4e07-8106-cf38d82616d3",
     "name": "Tech and Trendy play experience",
     "color": "#1d4ed8",
-    "stops": []
+    "stops": [
+      {
+        "id": "5732e459-5aac-4c68-8f98-f8aadf946bd3",
+        "name": "Light Box World",
+        "zh": "",
+        "note": "",
+        "mins": 10,
+        "lng": 114.080456,
+        "lat": 22.54987,
+        "via": []
+      },
+      {
+        "id": "70a43ac4-88ff-4286-987b-27c98c654d1e",
+        "name": "Rockey Trendy Play Town",
+        "zh": "振华路",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081089,
+        "lat": 22.547125,
+        "via": []
+      },
+      {
+        "id": "eb47787f-8520-4ee2-8d1a-76bea4f397c1",
+        "name": "Global AI Application Center",
+        "zh": "华强北路",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081652,
+        "lat": 22.547294,
+        "via": []
+      },
+      {
+        "id": "5f0d555c-ea51-4f0d-920d-a0e639f2fec0",
+        "name": "Futian Low Altitude Excibition Hall",
+        "zh": "",
+        "note": "",
+        "mins": 10,
+        "lng": 114.08276,
+        "lat": 22.543995,
+        "via": []
+      },
+      {
+        "id": "3a8a1845-76e3-470e-91c7-82269b128793",
+        "name": "Perfect Play Stategy",
+        "zh": "阿迪达斯",
+        "note": "",
+        "mins": 10,
+        "lng": 114.078285,
+        "lat": 22.543561,
+        "via": []
+      }
+    ]
   },
   {
     "id": "8c01fe0b-b474-4492-97e1-764d55e88a78",
