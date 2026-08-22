@@ -230,9 +230,18 @@ for (const [name, group] of stationGroups) {
   });
 }
 
+// The 1-17 series north of 振华路 (lat 22.5471) is tagged railway=subway_entrance
+// but carries nothing except a number, sits 135-305m from any station, and runs in
+// two columns up 华强北路. It does not correspond to anything on the ground, so it
+// is dropped rather than drawn as metro access.
+const ZHENGHUA_LAT = 22.5472;
+const bogusEntrance = (ref, lat) => /^\d+$/.test(ref) && lat > ZHENGHUA_LAT;
+
+let dropped = 0;
 for (const e of entrances) {
   const at = [r6(e.lon), r6(e.lat)];
   const ref = (e.tags.ref || e.tags.name || '').trim() || '?';
+  if (bogusEntrance(ref, e.lat)) { dropped++; continue; }
   let station = null, colour = '#1c7a4a', bd = 600;
   for (const s of stationAt) {
     const d = metres(at, s.at);
@@ -258,7 +267,8 @@ for (const e of entrances) {
   const file = path.join(OUT, 'transit.geojson');
   fs.writeFileSync(file, JSON.stringify({ type: 'FeatureCollection', features: transit }));
   const st = transit.filter((f) => f.properties.kind === 'station').length;
-  console.log(`  transit    ${String(transit.length).padStart(5)}  (${st} stations, ${transit.length - st} exits)  `
+  console.log(`  transit    ${String(transit.length).padStart(5)}  (${st} stations, ${transit.length - st} exits`
+    + `${dropped ? `, ${dropped} unmapped numbered entrances dropped` : ''})  `
     + `${(fs.statSync(file).size / 1024).toFixed(0)} KB`);
 }
 

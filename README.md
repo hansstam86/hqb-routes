@@ -94,9 +94,9 @@ are unaffected.
 
 Getting around Huaqiangbei starts at a metro exit, so the map treats them as first-class.
 
-**Exits** are drawn as green pills with the letter people actually navigate by — `A`, `D1`,
-`E2`. There are 57 of them in the district; 华强北 alone has 18. OpenStreetMap had this all
-along and the map was throwing it away.
+**Exits** are drawn as pills with the letter people actually navigate by — `A`, `D1`, `E2` —
+in the colour of the line they serve. There are 40 of them across seven stations.
+OpenStreetMap had this all along and the map was throwing it away.
 
 **Lines** are drawn in their own colours — Line 1 green, Line 2 orange, Line 7 blue — dashed,
 because they run underneath you.
@@ -110,13 +110,14 @@ stops where is derived at build time by matching each line's stop-positions to t
 beside it; and station *areas* (`building=train_station`) carry no line reference at all, so
 they're matched back by name.
 
-**Exit attribution is a derivation, not a fact.** Lettered exits sit 37–214 m from their
-station and clearly belong to it. But 17 entrances along 华强北路 are tagged with nothing but
-a number, run 135–305 m from the nearest station, and form one continuous series between 华新
-and 华强北 — most likely entrances to the underground shopping street rather than either
-station. Guessing would put a wrong line colour on the map, so those stay neutral green and
-unattributed, labelled `metro entrance 7`. If you know which they belong to, say so and I'll
-fix them.
+**A series that wasn't real.** OpenStreetMap tags 17 nodes north of 振华路 as
+`railway=subway_entrance` with nothing but a number, 1 to 17. They sit 135–305 m from any
+station and run in two columns up 华强北路. They don't correspond to metro access on the
+ground, so the build drops them (`bogusEntrance` in `scripts/build.mjs`). Every exit that
+survives is lettered and belongs to a station 37–214 m away.
+
+If a future `npm run fetch:osm` brings back numbered entrances somewhere legitimate, the rule
+is geographic — numeric ref *and* north of lat 22.5472 — so it won't silently eat them.
 
 **Nearest exit** is computed along the walking network, not as the crow flies, and shown on
 every building directory and above every route:
