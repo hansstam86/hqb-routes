@@ -3,17 +3,6 @@
     "id": "2253f6dc-2194-4e07-8106-cf38d82616d3",
     "name": "Route 1",
     "color": "#c81e3a",
-    "stops": [
-      {
-        "id": "2e893865-bd36-4350-8530-996703d9d099",
-        "name": "SEG Electronics Market",
-        "zh": "赛格电子市场",
-        "note": "",
-        "mins": 10,
-        "lng": 114.082141,
-        "lat": 22.543944,
-        "via": []
-      }
-    ]
+    "stops": []
   }
 ]
