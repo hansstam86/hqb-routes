@@ -16,5 +16,17 @@
     "name": "Smart Consumer Experience",
     "color": "#b45309",
     "stops": []
+  },
+  {
+    "id": "a889b1fb-77c7-467e-99a9-5f92663c4d2c",
+    "name": "Science and R&D",
+    "color": "#b45309",
+    "stops": []
+  },
+  {
+    "id": "c003cb3d-23f0-4562-aef6-0046fa2ed462",
+    "name": "AI Future Life",
+    "color": "#7c3aed",
+    "stops": []
   }
 ]
