@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>华强北 walking routes</title>
+<meta name="description" content="Build walking routes through Huaqiangbei, Shenzhen." />
+<link rel="stylesheet" href="./vendor/maplibre-gl.css" />
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+<!-- form fields here are app state, never a form to submit or autofill -->
+
+<div id="map"></div>
+
+<aside class="panel" id="panel">
+  <header class="head">
+    <div class="brand">华强北 <span>walking routes</span></div>
+    <button id="collapse" class="icon" title="Hide panel">‹</button>
+  </header>
+
+  <div class="routebar">
+    <select id="routeSel" aria-label="Active route"></select>
+    <button id="newRoute" class="icon" title="New route">+</button>
+  </div>
+
+  <div class="routemeta">
+    <input id="routeName" placeholder="Route name" aria-label="Route name" autocomplete="off" spellcheck="false" />
+    <div class="swatches" id="swatches"></div>
+  </div>
+
+  <div class="stats" id="stats">
+    <div><b id="statDist">0</b><span>distance</span></div>
+    <div><b id="statTime">0</b><span>total time</span></div>
+    <div><b id="statStops">0</b><span>stops</span></div>
+  </div>
+
+  <p class="warn" id="warn" hidden></p>
+
+  <ol class="stops" id="stops"></ol>
+
+  <p class="empty" id="empty">
+    Click <b>Add stops</b>, then click the map to drop stops in order.
+    The line follows real footpaths, so the distance is what you'll actually walk.
+  </p>
+
+  <footer class="foot">
+    <button id="share" class="ghost">Copy link</button>
+    <button id="export" class="ghost">Export</button>
+    <label class="ghost file">Import<input id="import" type="file" accept=".json" hidden /></label>
+    <button id="delRoute" class="ghost danger">Delete route</button>
+  </footer>
+</aside>
+
+<button id="reveal" class="reveal" hidden>›</button>
+
+<div class="toolbar">
+  <button id="addMode" class="tool">＋ Add stops</button>
+  <button id="undo" class="tool ghost" title="Remove last stop">Undo</button>
+  <span class="hint" id="hint"></span>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

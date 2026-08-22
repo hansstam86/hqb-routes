@@ -1,0 +1,16 @@
+{
+  "name": "hqb-routes",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Walking route builder for Huaqiangbei, Shenzhen",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "fetch:osm": "bash scripts/fetch-osm.sh",
+    "dev": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "maplibre-gl": "^6.5.0",
+    "osmtogeojson": "^3.0.0-beta.5"
+  }
+}
