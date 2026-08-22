@@ -117,7 +117,68 @@
     "id": "81ef1a67-bb90-4572-a178-07c35d2e20e2",
     "name": "Smart Consumer Experience",
     "color": "#b45309",
-    "stops": []
+    "stops": [
+      {
+        "id": "59be7f3b-302a-47d4-b3b8-f069e5014232",
+        "name": "Maoye World",
+        "zh": "茂业百货",
+        "note": "",
+        "mins": 10,
+        "lng": 114.080969,
+        "lat": 22.548458,
+        "via": []
+      },
+      {
+        "id": "799075a6-2d93-4065-9b89-9a23f427173f",
+        "name": "AVIC Center Rainbow Shopping Center",
+        "zh": "中航城天虹购物中心",
+        "note": "",
+        "mins": 10,
+        "lng": 114.077847,
+        "lat": 22.545377,
+        "via": []
+      },
+      {
+        "id": "df8e07bf-df53-4eec-a396-9d8aa5424e23",
+        "name": "Yestar Female Beauty Hospital",
+        "zh": "格兰云天大酒店",
+        "note": "",
+        "mins": 10,
+        "lng": 114.077628,
+        "lat": 22.543478,
+        "via": []
+      },
+      {
+        "id": "2edf1878-dd40-494d-9ff5-7c962361c268",
+        "name": "Mylike Female Beauty Hospital",
+        "zh": "华发路",
+        "note": "",
+        "mins": 10,
+        "lng": 114.085558,
+        "lat": 22.544258,
+        "via": []
+      },
+      {
+        "id": "1449e123-a420-42ee-bb97-455c8acc418c",
+        "name": "Aihua Sport Community",
+        "zh": "爱华宾馆",
+        "note": "",
+        "mins": 10,
+        "lng": 114.086137,
+        "lat": 22.543564,
+        "via": []
+      },
+      {
+        "id": "37c86fac-a5c9-4d6f-8469-3e9895be5865",
+        "name": "Women's underwear Wholesale Market",
+        "zh": "",
+        "note": "",
+        "mins": 10,
+        "lng": 114.086888,
+        "lat": 22.546673,
+        "via": []
+      }
+    ]
   },
   {
     "id": "a889b1fb-77c7-467e-99a9-5f92663c4d2c",
