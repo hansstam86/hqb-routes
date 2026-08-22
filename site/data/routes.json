@@ -194,6 +194,66 @@
         "lng": 114.080459,
         "lat": 22.549896,
         "via": []
+      },
+      {
+        "id": "7b5a7312-d4e1-4146-8338-4ec802512803",
+        "name": "Rocky Trendy Play Town",
+        "zh": "良品铺子",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081232,
+        "lat": 22.546281,
+        "via": []
+      },
+      {
+        "id": "ba6fc479-4736-46f5-9f60-f752b069512b",
+        "name": "Global AI Application Center",
+        "zh": "华强北路",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081614,
+        "lat": 22.5473,
+        "via": []
+      },
+      {
+        "id": "9590fa59-a006-4511-b75e-e57ace0ab889",
+        "name": "Huaqiangbei Museum",
+        "zh": "广博现代之窗大厦",
+        "note": "",
+        "mins": 10,
+        "lng": 114.082062,
+        "lat": 22.546833,
+        "via": []
+      },
+      {
+        "id": "452b29a2-bfa6-4621-91da-3416b9790b2b",
+        "name": "Futian Low atlitude excibition hall",
+        "zh": "",
+        "note": "",
+        "mins": 10,
+        "lng": 114.082792,
+        "lat": 22.543878,
+        "via": []
+      },
+      {
+        "id": "59aa6bc1-2547-4027-9292-0dfc0e7aef41",
+        "name": "Futian Science and Technology Museum",
+        "zh": "中信国际大厦·信荟",
+        "note": "",
+        "mins": 10,
+        "lng": 114.089995,
+        "lat": 22.54261,
+        "via": []
+      },
+      {
+        "id": "e59855f8-c7d9-4470-b1b0-2a0b48a427bc",
+        "name": "Shenzhen Children's Library",
+        "zh": "",
+        "note": "",
+        "mins": 10,
+        "lng": 114.094629,
+        "lat": 22.546109,
+        "via": []
       }
     ]
   },
