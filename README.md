@@ -90,16 +90,40 @@ keeps them attached — unless OSM replaces the feature, in which case the overr
 orphaned and the OSM label returns. Names you added yourself carry their own coordinates and
 are unaffected.
 
+## What's sold where
+
+Huaqiangbei is vertical: which floor a thing is on matters more than which street. The
+**Buildings** tab keeps a floor-by-floor directory for each building.
+
+Click any building on the map with no tool active and it opens there. Add floors, each with a
+level (`B1`, `1F`, `3F`), what's sold on it, and the Chinese for the same. Floors sort the way
+you'd walk them — B2, B1, 1F, 2F — regardless of the order you type them in. Buildings with a
+directory are tinted **gold** on the map, so you can see at a glance which ones you've done.
+
+The search box is the point of all this. Type `connectors` or `线材` and it searches every
+directory at once, returning the building *and the floor*:
+
+```
+SEG Plaza    3F    Connectors, cables, wire
+```
+
+Click a result to jump there. It matches both scripts, so you can search in whichever you
+were thinking in.
+
+Directories live in `site/data/buildings.json`, keyed by OpenStreetMap id like the names, and
+publish with the same button. Visitors get a read-only directory board; only you see the
+editing controls.
+
 ## Who can edit
 
-Routes and custom names are **public** — everyone loading the site gets the same data from
-`site/data/routes.json` and `site/data/places.json`, committed in this repo.
+Routes, custom names and building directories are **public** — everyone loading the site gets
+the same data from `routes.json`, `places.json` and `buildings.json`, committed in this repo.
 
 Editing is **yours alone**. The lock button asks for a GitHub fine-grained token with
 `Contents: Read and write` on this repo; without one the site is strictly read-only, with no
 add, edit, delete or publish controls. With one, the **Publish** button commits whichever
-of the two files changed straight to `main` via the GitHub API, and Pages redeploys in about
-a minute.
+of the three data files changed straight to `main` via the GitHub API, and Pages redeploys in
+about a minute.
 
 The token is stored only in your browser's `localStorage`. It is never committed and never
 sent anywhere except `api.github.com`. It is a real credential: anyone with access to that
@@ -161,6 +185,7 @@ site/                  ← the deployable site
   data/                basemap layers + walkgraph.json
   data/routes.json     the published routes (public read, author-only write)
   data/places.json     your names: overrides, hidden labels, and ones you added
+  data/buildings.json  floor-by-floor directories of what's sold where
   router.js            Dijkstra over the walking graph
   app.js               map, route model, UI
   vendor/ fonts/       MapLibre and label glyphs, vendored so nothing is fetched at runtime

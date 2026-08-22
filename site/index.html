@@ -21,6 +21,15 @@
     <button id="collapse" class="icon" title="Hide panel">‹</button>
   </header>
 
+  <div class="tabsrow">
+    <div class="tabs">
+      <button data-tab="routes" class="on">Routes</button>
+      <button data-tab="buildings">Buildings</button>
+    </div>
+    <button id="publish" class="publish build-only" hidden>Publish</button>
+  </div>
+
+  <section class="tab" data-tab="routes">
   <div class="routebar">
     <select id="routeSel" aria-label="Route"></select>
     <button id="newRoute" class="icon build-only" title="New route">+</button>
@@ -47,8 +56,19 @@
     <button id="export" class="ghost build-only">Export</button>
     <label class="ghost file build-only">Import<input id="import" type="file" accept=".json" hidden /></label>
     <button id="delRoute" class="ghost danger build-only">Delete</button>
-    <button id="publish" class="publish build-only" hidden>Publish</button>
   </footer>
+  </section>
+
+  <section class="tab" data-tab="buildings" hidden>
+    <div class="bsearch">
+      <input id="bSearch" type="search" placeholder="What are you after? e.g. connectors, 线材"
+             autocomplete="off" aria-label="Search what's sold where" />
+    </div>
+    <div id="bBody" class="bbody"></div>
+    <footer class="foot bfoot">
+      <span id="bHint" class="bhint"></span>
+    </footer>
+  </section>
 </aside>
 
 <button id="reveal" class="reveal" hidden>›</button>

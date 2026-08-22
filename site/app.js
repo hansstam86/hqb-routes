@@ -2,6 +2,7 @@ import * as maplibregl from './vendor/maplibre-gl.mjs';   // v6 exports names, n
 import { createRouter } from './router.js';
 
 const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const COLORS = ['#c81e3a', '#1d4ed8', '#047857', '#b45309', '#7c3aed', '#0e7490'];
 const WALK_M_PER_MIN = 70;          // ~4.2 km/h, allowing for Huaqiangbei crowds
@@ -37,7 +38,11 @@ const style = {
     { id: 'green', type: 'fill', source: 'green', paint: { 'fill-color': '#e3e9d7' } },
     { id: 'water', type: 'fill', source: 'water', paint: { 'fill-color': '#c8dced' } },
     { id: 'buildings', type: 'fill', source: 'buildings',
-      paint: { 'fill-color': ['case', ['has', 'name'], '#e0d8ca', '#e9e5dc'], 'fill-outline-color': '#cdc6b8' } },
+      paint: {
+        // A warmer fill marks the buildings you've written a directory for.
+        'fill-color': ['case', ['==', ['get', 'hasDir'], 1], '#e7d6b0', ['has', 'name'], '#e0d8ca', '#e9e5dc'],
+        'fill-outline-color': ['case', ['==', ['get', 'hasDir'], 1], '#c9ab72', '#cdc6b8'],
+      } },
 
     road('r-minor-c', 'minor', [14, 2.2, 19, 11], '#d5cec1'),
     road('r-ter-c', 'tertiary', [13, 2.8, 19, 15], '#cec6b6'),
@@ -162,6 +167,7 @@ const REPO = { owner: 'hansstam86', repo: 'hqb-routes', branch: 'main' };
 const FILES = {
   routes: { path: 'site/data/routes.json', label: 'routes' },
   places: { path: 'site/data/places.json', label: 'names' },
+  buildings: { path: 'site/data/buildings.json', label: 'building directories' },
 };
 const TOKEN_KEY = 'hqb.gh.token';
 const DRAFT_KEY = 'hqb.draft.v3';
@@ -170,7 +176,8 @@ const LANG_KEY = 'hqb.lang';
 
 let routes = [];
 let places = {};              // OSM id -> { en, zh }: names you've given things
-let publishedJson = { routes: '[]', places: '{}' };
+let buildings = {};           // OSM id -> { floors: [{ level, en, zh }] }: what's sold where
+let publishedJson = { routes: '[]', places: '{}', buildings: '{}' };
 let lang = localStorage.getItem(LANG_KEY) || 'zh';
 let canBuild = false;
 let activeId = null;
@@ -181,12 +188,12 @@ let markers = [];
 let legs = [];
 const basemap = { buildings: null, roads: null, pois: null };
 
-const live = { routes: () => routes, places: () => places };
+const live = { routes: () => routes, places: () => places, buildings: () => buildings };
 const token = () => localStorage.getItem(TOKEN_KEY);
 const active = () => routes.find((r) => r.id === activeId) ?? null;
 const dirtyKeys = () => Object.keys(FILES).filter((k) => JSON.stringify(live[k]()) !== publishedJson[k]);
 const dirty = () => dirtyKeys().length > 0;
-const saveDraft = () => canBuild && localStorage.setItem(DRAFT_KEY, JSON.stringify({ routes, places }));
+const saveDraft = () => canBuild && localStorage.setItem(DRAFT_KEY, JSON.stringify({ routes, places, buildings }));
 
 const b64 = (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
 const unb64 = (s) => new TextDecoder().decode(Uint8Array.from(atob(s), (c) => c.charCodeAt(0)));
@@ -297,6 +304,7 @@ function applyLabels() {
       const label = o?.hidden ? (renameMode ? osmName : null) : pickName(o?.zh || p.zh, o?.en || p.en);
       if (label) p.label = label; else delete p.label;
       p.custom = o?.hidden ? 2 : (o ? 1 : 0);
+      p.hasDir = buildings[p.oid]?.floors?.length ? 1 : 0;
     }
     map.getSource(key)?.setData(fc);
   }
@@ -304,6 +312,39 @@ function applyLabels() {
   $('#lang').textContent = lang === 'zh' ? '中' : 'EN';
   $('#lang').title = lang === 'zh' ? 'Showing Chinese — click for English' : 'Showing English — click for Chinese';
 }
+
+const featureIdx = new Map();   // oid -> { zh, en, at }
+
+function indexFeature(f) {
+  const p = f.properties;
+  if (!p.oid || featureIdx.has(p.oid)) return;
+  const g = f.geometry;
+  let at = null;
+  if (g.type === 'Point') at = g.coordinates;
+  else {
+    const ring = g.type === 'Polygon' ? g.coordinates[0]
+      : g.type === 'MultiPolygon' ? g.coordinates[0][0] : g.coordinates;
+    if (ring?.length) {
+      let x = 0, y = 0;
+      for (const c of ring) { x += c[0]; y += c[1]; }
+      at = [x / ring.length, y / ring.length];
+    }
+  }
+  if (at) featureIdx.set(p.oid, { zh: p.zh || null, en: p.en || null, at });
+}
+
+// The name to show for a directory entry, honouring anything you've renamed.
+function nameOf(oid) {
+  const o = places[oid];
+  const f = featureIdx.get(oid);
+  return pickName(o?.zh || f?.zh, o?.en || f?.en) || '(unnamed building)';
+}
+const otherNameOf = (oid) => {
+  const o = places[oid], f = featureIdx.get(oid);
+  const zh = o?.zh || f?.zh, en = o?.en || f?.en;
+  const other = lang === 'zh' ? en : zh;
+  return other && other !== nameOf(oid) ? other : '';
+};
 
 async function loadBasemap() {
   await Promise.all(['buildings', 'roads', 'pois'].map(async (k) => {
@@ -324,6 +365,7 @@ async function loadBasemap() {
   for (const f of basemap.buildings?.features ?? []) {
     if (malls.has(f.properties.oid)) f.properties.isMall = 1;
   }
+  for (const k of ['pois', 'buildings']) for (const f of basemap[k]?.features ?? []) indexFeature(f);
   applyLabels();
 }
 
@@ -648,7 +690,16 @@ map.on('click', (e) => {
     if (hit) return openOsm(hit);
     return openNew(e.lngLat);
   }
-  if (!addMode || !canBuild) return;
+  if (!addMode) {
+    const hit = pickFeature(e.point);
+    if (hit && (hit.key === 'buildings' || hit.key === 'pois')) {
+      const oid = hit.props.oid;
+      if (canBuild) { buildings[oid] ??= { floors: [] }; }
+      if (canBuild || buildings[oid]?.floors?.length) return selectBuilding(oid);
+    }
+    return;
+  }
+  if (!canBuild) return;
   const r = active() ?? newRoute();
   // Take both scripts from the place you clicked, so the stop can be shown to a
   // local in Chinese even if you filed it under an English name.
@@ -842,6 +893,183 @@ $('#lang').onclick = () => {
   renderStops();
 };
 
+/* ---------------------------------------------------------------- buildings
+
+   Huaqiangbei is vertical: which floor a thing is on matters more than which
+   street. Each building keeps an ordered list of floors and what's sold there,
+   in both scripts so you can point at it. */
+
+let bSelected = null;
+let bQuery = '';
+
+// B2 < B1 < 1F < 2F, so the list reads the way you'd walk it.
+function levelOrder(l) {
+  const t = String(l || '').trim().toUpperCase();
+  const b = t.match(/^B\s*(\d+)/);
+  if (b) return -Number(b[1]);
+  const f = t.match(/^(\d+)\s*F?$/);
+  if (f) return Number(f[1]);
+  if (t === 'G' || t === 'GF') return 0;
+  return 99;
+}
+const sortedFloors = (oid) =>
+  [...(buildings[oid]?.floors ?? [])].sort((a, b) => levelOrder(a.level) - levelOrder(b.level));
+
+function floorsMatching(oid, q) {
+  const floors = sortedFloors(oid);
+  if (!q) return floors;
+  return floors.filter((f) => `${f.en} ${f.zh}`.toLowerCase().includes(q));
+}
+
+function showTab(name) {
+  $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
+  $$('.panel > .tab').forEach((sec) => { sec.hidden = sec.dataset.tab !== name; });
+  if (name === 'buildings') renderBuildings();
+}
+
+function selectBuilding(oid) {
+  bSelected = oid;
+  showTab('buildings');
+  renderBuildings();
+  const at = featureIdx.get(oid)?.at;
+  if (at) map.flyTo({ center: at, zoom: Math.max(map.getZoom(), 17) });
+}
+
+function renderBuildings() {
+  const el = $('#bBody');
+  const q = bQuery.trim().toLowerCase();
+  el.innerHTML = '';
+
+  // Searching looks across every directory at once: the point is to find which
+  // building and which floor, not to browse one you already know.
+  if (q) {
+    const hits = Object.keys(buildings)
+      .map((oid) => ({ oid, floors: floorsMatching(oid, q) }))
+      .filter((h) => h.floors.length);
+    $('#bHint').textContent = hits.length
+      ? `${hits.reduce((a, h) => a + h.floors.length, 0)} floor(s) in ${hits.length} building(s)`
+      : '';
+    if (!hits.length) {
+      el.innerHTML = `<p class="bempty">Nothing recorded for <b>${esc(bQuery)}</b> yet.</p>`;
+      return;
+    }
+    const list = document.createElement('div');
+    list.className = 'blist';
+    for (const h of hits) {
+      for (const f of h.floors) {
+        const btn = document.createElement('button');
+        btn.innerHTML = `<span class="bn">${esc(nameOf(h.oid))}</span>`
+          + `<span class="hit">${esc(f.level)}</span>`
+          + `<span class="bf">${esc(lang === 'zh' ? (f.zh || f.en) : (f.en || f.zh))}</span>`;
+        btn.onclick = () => { bQuery = ''; $('#bSearch').value = ''; selectBuilding(h.oid); };
+        list.append(btn);
+      }
+    }
+    el.append(list);
+    return;
+  }
+
+  // No search: either one building's directory, or the index of what exists.
+  if (!bSelected) {
+    const keys = Object.keys(buildings).filter((k) => buildings[k]?.floors?.length);
+    $('#bHint').textContent = keys.length ? `${keys.length} building(s) mapped` : '';
+    if (!keys.length) {
+      el.innerHTML = `<p class="bempty">${canBuild
+        ? 'Click any building on the map to record what\u2019s sold on each floor.'
+        : 'No building directories published yet.'}</p>`;
+      return;
+    }
+    const list = document.createElement('div');
+    list.className = 'blist';
+    for (const oid of keys.sort((a, b) => nameOf(a).localeCompare(nameOf(b)))) {
+      const btn = document.createElement('button');
+      btn.innerHTML = `<span class="bn">${esc(nameOf(oid))}</span>`
+        + `<span class="bf">${buildings[oid].floors.length} floors</span>`;
+      btn.onclick = () => selectBuilding(oid);
+      list.append(btn);
+    }
+    el.append(list);
+    return;
+  }
+
+  const oid = bSelected;
+  const other = otherNameOf(oid);
+  const card = document.createElement('div');
+  card.className = 'bcard';
+  card.innerHTML = `<h3>${esc(nameOf(oid))}</h3>`
+    + (other ? `<div class="sub">${esc(other)}</div>` : '<div class="sub"></div>');
+  el.append(card);
+
+  const floors = sortedFloors(oid);
+  $('#bHint').textContent = floors.length ? `${floors.length} floor(s)` : '';
+
+  if (!floors.length && !canBuild) {
+    el.innerHTML += '<p class="bempty">Nothing recorded for this building yet.</p>';
+  }
+
+  for (const f of floors) {
+    const row = document.createElement('div');
+    row.className = 'floor';
+    if (canBuild) {
+      row.innerHTML = `
+        <input class="lvlin" value="${esc(f.level)}" placeholder="3F" autocomplete="off" />
+        <div>
+          <input class="fen" value="${esc(f.en)}" placeholder="What's sold here" autocomplete="off" />
+          <input class="fzh" value="${esc(f.zh)}" placeholder="中文" autocomplete="off" />
+        </div>
+        <button class="x" title="Remove floor">×</button>`;
+      row.querySelector('.lvlin').oninput = (e) => { f.level = e.target.value; touchBuildings(false); };
+      row.querySelector('.fen').oninput = (e) => { f.en = e.target.value; touchBuildings(false); };
+      row.querySelector('.fzh').oninput = (e) => { f.zh = e.target.value; touchBuildings(false); };
+      row.querySelector('.x').onclick = () => {
+        buildings[oid].floors = buildings[oid].floors.filter((x) => x !== f);
+        touchBuildings(true);
+      };
+    } else {
+      row.innerHTML = `
+        <div class="lvl">${esc(f.level)}</div>
+        <div>
+          <div class="ro-en">${esc(lang === 'zh' ? (f.zh || f.en) : (f.en || f.zh))}</div>
+          ${(lang === 'zh' ? f.en : f.zh) ? `<div class="ro-zh">${esc(lang === 'zh' ? f.en : f.zh)}</div>` : ''}
+        </div><div></div>`;
+    }
+    el.append(row);
+  }
+
+  if (canBuild) {
+    const add = document.createElement('div');
+    add.className = 'baddrow';
+    add.innerHTML = '<button class="ghost" id="bAdd">+ Add floor</button>'
+      + '<button class="ghost" id="bBack">All buildings</button>';
+    el.append(add);
+    add.querySelector('#bAdd').onclick = () => {
+      buildings[oid] ??= { floors: [] };
+      buildings[oid].floors.push({ level: '', en: '', zh: '' });
+      touchBuildings(true);
+    };
+    add.querySelector('#bBack').onclick = () => { bSelected = null; renderBuildings(); };
+  } else {
+    const back = document.createElement('div');
+    back.className = 'baddrow';
+    back.innerHTML = '<button class="ghost" id="bBack">All buildings</button>';
+    el.append(back);
+    back.querySelector('#bBack').onclick = () => { bSelected = null; renderBuildings(); };
+  }
+}
+
+/* Re-render only when the shape changed; typing shouldn't steal focus. */
+function touchBuildings(rerender) {
+  const oid = bSelected;
+  if (oid && !buildings[oid]?.floors?.length) delete buildings[oid];
+  saveDraft();
+  refreshPublish();
+  applyLabels();
+  if (rerender) renderBuildings();
+}
+
+$$('.tabs button').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
+$('#bSearch').oninput = (e) => { bQuery = e.target.value; bSelected = null; renderBuildings(); };
+
 /* ---------------------------------------------------------------- chrome */
 
 $('#routeSel').onchange = (e) => selectRoute(e.target.value);
@@ -960,10 +1188,16 @@ map.on('load', async () => {
 
   applyMode();
 
-  const [pubRoutes, pubPlaces] = await Promise.all([loadJson('routes', []), loadJson('places', {})]);
+  const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+  const [pubRoutes, pubPlaces, pubBuildings] = await Promise.all([
+    loadJson('routes', []), loadJson('places', {}), loadJson('buildings', {}),
+  ]);
   routes = Array.isArray(pubRoutes) ? pubRoutes : [];
-  places = (pubPlaces && typeof pubPlaces === 'object' && !Array.isArray(pubPlaces)) ? pubPlaces : {};
-  publishedJson = { routes: JSON.stringify(routes), places: JSON.stringify(places) };
+  places = isObj(pubPlaces) ? pubPlaces : {};
+  buildings = isObj(pubBuildings) ? pubBuildings : {};
+  publishedJson = {
+    routes: JSON.stringify(routes), places: JSON.stringify(places), buildings: JSON.stringify(buildings),
+  };
 
   if (canBuild) {
     // An unpublished draft beats the published copy; losing edits would be worse
@@ -971,9 +1205,11 @@ map.on('load', async () => {
     try {
       const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
       if (d && (JSON.stringify(d.routes) !== publishedJson.routes
-             || JSON.stringify(d.places) !== publishedJson.places)) {
+             || JSON.stringify(d.places) !== publishedJson.places
+             || JSON.stringify(d.buildings) !== publishedJson.buildings)) {
         if (Array.isArray(d.routes)) routes = d.routes;
-        if (d.places && typeof d.places === 'object') places = d.places;
+        if (isObj(d.places)) places = d.places;
+        if (isObj(d.buildings)) buildings = d.buildings;
         toast('Restored unpublished changes');
       }
     } catch { /* ignore */ }
