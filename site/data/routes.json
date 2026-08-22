@@ -183,8 +183,19 @@
   {
     "id": "a889b1fb-77c7-467e-99a9-5f92663c4d2c",
     "name": "Science and R&D",
-    "color": "#b45309",
-    "stops": []
+    "color": "#7c3aed",
+    "stops": [
+      {
+        "id": "14af7701-9d7f-48c7-9aa0-7442e86935c8",
+        "name": "Light Box World",
+        "zh": "女人世界外贸城",
+        "note": "",
+        "mins": 10,
+        "lng": 114.080459,
+        "lat": 22.549896,
+        "via": []
+      }
+    ]
   },
   {
     "id": "c003cb3d-23f0-4562-aef6-0046fa2ed462",
