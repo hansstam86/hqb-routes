@@ -31,5 +31,51 @@
         ]
       }
     ]
+  },
+  "way/476254578": {
+    "floors": [
+      {
+        "id": "04f139c8",
+        "level": "1F",
+        "en": "",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "fdac6368",
+        "level": "2F",
+        "en": "",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "14b012bb",
+        "level": "4F",
+        "en": "",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "52f5fe08",
+        "level": "3F",
+        "en": "",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "6fbe4b77",
+        "level": "5F",
+        "en": "",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "924ec43f",
+        "level": "6F",
+        "en": "",
+        "zh": "",
+        "booths": []
+      }
+    ]
   }
 }
