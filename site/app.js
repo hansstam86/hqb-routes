@@ -207,7 +207,6 @@ const map = new maplibregl.Map({
   attributionControl: { compact: true },
 });
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
-map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: true }), 'bottom-right');
 map.addControl(new maplibregl.ScaleControl({ maxWidth: 90, unit: 'metric' }), 'bottom-right');
 
 /* ---------------------------------------------------------------- sheet
@@ -442,6 +441,7 @@ function applyLabels() {
     map.getSource(key)?.setData(fc);
   }
   drawCustoms();
+  buildOsmIndex();
   $('#lang').textContent = lang === 'zh' ? '中' : 'EN';
   $('#lang').title = lang === 'zh' ? 'Showing Chinese — click for English' : 'Showing English — click for Chinese';
 }
@@ -716,6 +716,7 @@ function renderStops() {
   const r = active();
   const el = $('#stops');
   renderRouteExit();
+  renderMeHint();
   el.innerHTML = '';
   const has = !!(r && r.stops.length);
   $('#empty').hidden = has;
@@ -1098,6 +1099,88 @@ $('#lang').onclick = () => {
   if (!$('.panel > .tab[data-tab=buildings]').hidden) renderBuildings();
 };
 
+/* ---------------------------------------------------------------- where I am
+
+   Walking the market, the question is "where am I and how far to the next stop".
+   Distances are measured on the walking graph like everything else, so they match
+   what the route says rather than being straight-line. */
+
+let watchId = null;
+let meMarker = null;
+let mePos = null;
+let meAcc = null;
+
+function stopLocating() {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  meMarker?.remove();
+  meMarker = null;
+  mePos = null;
+  $('#locate').classList.remove('on', 'seeking');
+  $('#meHint').hidden = true;
+}
+
+function startLocating() {
+  if (!navigator.geolocation) return toast('This browser has no location support');
+  $('#locate').classList.add('seeking');
+  let first = true;
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      mePos = [pos.coords.longitude, pos.coords.latitude];
+      meAcc = pos.coords.accuracy;
+      $('#locate').classList.remove('seeking');
+      $('#locate').classList.add('on');
+      if (!meMarker) {
+        const el = document.createElement('div');
+        el.className = 'me-dot';
+        meMarker = new maplibregl.Marker({ element: el }).setLngLat(mePos).addTo(map);
+      } else meMarker.setLngLat(mePos);
+      if (first) {
+        first = false;
+        revealMap();
+        map.easeTo({ center: mePos, zoom: Math.max(map.getZoom(), 17), duration: 700 });
+      }
+      renderMeHint();
+    },
+    (err) => {
+      $('#locate').classList.remove('seeking', 'on');
+      toast(err.code === err.PERMISSION_DENIED
+        ? 'Location permission denied'
+        : `Location unavailable (${err.message})`);
+      watchId = null;
+    },
+    { enableHighAccuracy: true, maximumAge: 4000, timeout: 20000 },
+  );
+}
+
+/* Nearest stop on the active route, by walking distance. No progress model is
+   invented: it answers "which stop am I closest to", which is the question you
+   actually have when you look at your phone mid-walk. */
+function renderMeHint() {
+  const box = $('#meHint');
+  const r = active();
+  if (!mePos) { box.hidden = true; return; }
+  const acc = meAcc ? `<span class="acc">±${Math.round(meAcc)} m</span>` : '';
+
+  if (!r?.stops?.length || !router) {
+    box.hidden = false;
+    box.innerHTML = `<span>You're here.</span>${acc}`;
+    return;
+  }
+  let best = null, bd = Infinity, bi = 0;
+  r.stops.forEach((st, i) => {
+    const leg = router.leg(mePos, [st.lng, st.lat]);
+    if (leg.metres < bd) { bd = leg.metres; best = st; bi = i; }
+  });
+  box.hidden = false;
+  box.innerHTML = best
+    ? `<span>Nearest stop <b>${bi + 1}</b> · ${esc(stopPrimary(best) || 'unnamed')}`
+      + ` · <b>${fmtDist(bd)}</b></span>${acc}`
+    : `<span>You're here.</span>${acc}`;
+}
+
+$('#locate').onclick = () => (watchId === null ? startLocating() : stopLocating());
+
 /* ---------------------------------------------------------------- transit
 
    Which exit to come out of is the thing people actually need in Shenzhen, so
@@ -1105,6 +1188,7 @@ $('#lang').onclick = () => {
    measured along the walking network, not as the crow flies. */
 
 let exitIdx = [];              // { props, at, node } for every exit
+let transitIdx = [];           // stations and exits, for search
 let stationMarkers = [];
 const nearestCache = new Map();
 
@@ -1115,6 +1199,7 @@ async function loadTransit() {
 
   const stations = fc.features.filter((f) => f.properties.kind === 'station');
   const exits = fc.features.filter((f) => f.properties.kind === 'exit');
+  transitIdx = fc.features.map((f) => ({ p: f.properties, at: f.geometry.coordinates }));
 
   if (router) {
     exitIdx = exits.map((f) => ({
@@ -1190,7 +1275,6 @@ const exitLine = (x) => x
    in both scripts so you can point at it. */
 
 let bSelected = null;
-let bQuery = '';
 const bOpen = new Set();       // "<oid>:<floorId>" of expanded floors
 
 // B2 < B1 < 1F < 2F, so the list reads the way you'd walk it.
@@ -1255,37 +1339,10 @@ function selectBuilding(oid) {
 function renderBuildings() {
   normalizeBuildings();
   const el = $('#bBody');
-  const q = bQuery.trim().toLowerCase();
   el.innerHTML = '';
 
-  if (q) return renderSearch(el, q);
   if (!bSelected) return renderIndex(el);
   return renderBuilding(el, bSelected);
-}
-
-function renderSearch(el, q) {
-  const hits = searchDirectories(q);
-  $('#bHint').textContent = hits.length ? `${hits.length} match(es)` : '';
-  if (!hits.length) {
-    el.innerHTML = `<p class="bempty">Nothing recorded for <b>${esc(bQuery)}</b> yet.</p>`;
-    return;
-  }
-  const list = document.createElement('div');
-  list.className = 'blist';
-  for (const h of hits) {
-    const btn = document.createElement('button');
-    const what = h.booth ? pick(h.booth.en, h.booth.zh) : pick(h.floor.en, h.floor.zh);
-    btn.innerHTML = `<span class="bn">${esc(nameOf(h.oid))}</span>`
-      + `<span class="hit">${esc(h.floor.level)}${h.booth?.code ? ` · ${esc(h.booth.code)}` : ''}</span>`
-      + `<span class="bf">${esc(what)}</span>`;
-    btn.onclick = () => {
-      bQuery = ''; $('#bSearch').value = '';
-      bOpen.add(`${h.oid}:${h.floor.id}`);
-      selectBuilding(h.oid);
-    };
-    list.append(btn);
-  }
-  el.append(list);
 }
 
 function renderIndex(el) {
@@ -1518,7 +1575,159 @@ function touchBuildings(rerender) {
 }
 
 $$('.tabs button').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
-$('#bSearch').oninput = (e) => { bQuery = e.target.value; bSelected = null; renderBuildings(); };
+
+/* ---------------------------------------------------------------- search
+
+   One box over everything: your routes and their stops, the building directories
+   down to individual booths, the entrances you placed, and every named thing
+   OpenStreetMap knows about. Searching in either script works throughout. */
+
+let osmIndex = [];
+
+function buildOsmIndex() {
+  osmIndex = [];
+  for (const [oid, f] of featureIdx) {
+    const o = places[oid];
+    if (o?.hidden) continue;
+    const zh = o?.zh || f.zh, en = o?.en || f.en;
+    if (!zh && !en) continue;
+    osmIndex.push({ oid, zh, en, at: f.at, custom: !!o });
+  }
+  for (const [id, v] of Object.entries(places)) {
+    if (id.startsWith('custom/') && Array.isArray(v.at)) {
+      osmIndex.push({ oid: id, zh: v.zh, en: v.en, at: v.at, custom: true });
+    }
+  }
+}
+
+const hay = (...xs) => xs.filter(Boolean).join(' ').toLowerCase();
+
+function globalSearch(raw) {
+  const q = raw.trim().toLowerCase();
+  if (!q) return [];
+  const out = [];
+
+  for (const r of routes) {
+    if (hay(r.name).includes(q)) out.push({ g: 'Routes', kind: 'route', r });
+    r.stops.forEach((st, i) => {
+      if (hay(st.name, st.zh, st.note).includes(q)) out.push({ g: 'Stops', kind: 'stop', r, st, i });
+    });
+  }
+
+  for (const oid of Object.keys(buildings)) {
+    const b = buildings[oid];
+    if (hay(nameOf(oid), otherNameOf(oid)).includes(q)) out.push({ g: 'Buildings', kind: 'building', oid });
+    for (const f of sortedFloors(oid)) {
+      if (hay(f.en, f.zh).includes(q)) out.push({ g: 'Floors', kind: 'floor', oid, f });
+      for (const bo of f.booths ?? []) {
+        if (hay(bo.code, bo.en, bo.zh, bo.note).includes(q)) out.push({ g: 'Booths', kind: 'booth', oid, f, bo });
+      }
+    }
+    for (const en of b.entrances ?? []) {
+      if (hay(en.ref, en.en, en.zh).includes(q)) out.push({ g: 'Ways in', kind: 'entrance', oid, en });
+    }
+  }
+
+  for (const t of transitIdx) {
+    const label = t.p.kind === 'station' ? (t.p.zh || t.p.name)
+      : (t.p.station ? `${t.p.station} ${t.p.ref}` : `exit ${t.p.ref}`);
+    if (hay(label, t.p.name, t.p.en, t.p.ref).includes(q)) out.push({ g: 'Metro', kind: 'transit', t, label });
+  }
+
+  for (const p of osmIndex) {
+    if (hay(p.zh, p.en).includes(q)) out.push({ g: 'Places', kind: 'place', p });
+  }
+
+  // Fixed group order, so results don't reshuffle depending on what matched first.
+  const ORDER = ['Routes', 'Stops', 'Buildings', 'Floors', 'Booths', 'Ways in', 'Metro', 'Places'];
+  out.sort((a, b) => ORDER.indexOf(a.g) - ORDER.indexOf(b.g));
+  return out.slice(0, 60);
+}
+
+function renderResults(raw) {
+  const el = $('#gResults');
+  const panel = $('#panel');
+  const hits = globalSearch(raw);
+  const searching = !!raw.trim();
+  panel.classList.toggle('searching', searching);
+  el.hidden = !searching;
+  if (!searching) return;
+
+  if (!hits.length) {
+    el.innerHTML = `<p class="gres-none">Nothing found for <b>${esc(raw)}</b>.</p>`;
+    return;
+  }
+  el.innerHTML = '';
+  let group = null;
+  for (const h of hits) {
+    if (h.g !== group) {
+      group = h.g;
+      const g = document.createElement('div');
+      g.className = 'gres-group';
+      g.textContent = group;
+      el.append(g);
+    }
+    const btn = document.createElement('button');
+    btn.className = 'gres';
+    btn.innerHTML = resultHtml(h);
+    btn.onclick = () => { clearSearch(); openResult(h); };
+    el.append(btn);
+  }
+}
+
+function resultHtml(h) {
+  const two = (a, b) => `<span class="t">${esc(a || '—')}</span>`
+    + (b && b !== a ? `<span class="zh">${esc(b)}</span>` : '');
+  switch (h.kind) {
+    case 'route': return `${two(h.r.name)}<span class="where">${h.r.stops.length} stops</span>`;
+    case 'stop': return `${two(stopPrimary(h.st), stopSecondary(h.st))}`
+      + `<span class="where">${esc(h.r.name)} · stop ${h.i + 1}</span>`;
+    case 'building': return `${two(nameOf(h.oid), otherNameOf(h.oid))}`
+      + `<span class="where">directory</span>`;
+    case 'floor': return `${two(pick(h.f.en, h.f.zh))}`
+      + `<span class="where">${esc(nameOf(h.oid))} · ${esc(h.f.level)}</span>`;
+    case 'booth': return `<span class="code">${esc(h.bo.code || '·')}</span>${two(pick(h.bo.en, h.bo.zh))}`
+      + `<span class="where">${esc(nameOf(h.oid))} · ${esc(h.f.level)}</span>`;
+    case 'entrance': return `<span class="code">${esc(h.en.ref || '·')}</span>`
+      + `${two(pickName(h.en.zh, h.en.en) || 'Entrance')}`
+      + `<span class="where">${esc(nameOf(h.oid))} · way in</span>`;
+    case 'transit': return `${two(h.label)}<span class="where">${h.t.p.kind === 'station' ? 'station' : 'exit'}</span>`;
+    default: return `${two(pickName(h.p.zh, h.p.en), lang === 'zh' ? h.p.en : h.p.zh)}`
+      + `<span class="where">${h.p.custom ? 'your name' : 'place'}</span>`;
+  }
+}
+
+function openResult(h) {
+  const fly = (at, z = 17.5) => { revealMap(); map.flyTo({ center: at, zoom: Math.max(map.getZoom(), z) }); };
+  switch (h.kind) {
+    case 'route': showTab('routes'); return selectRoute(h.r.id);
+    case 'stop':
+      showTab('routes');
+      selectRoute(h.r.id);
+      return fly([h.st.lng, h.st.lat]);
+    case 'building': return selectBuilding(h.oid);
+    case 'floor': bOpen.add(`${h.oid}:${h.f.id}`); return selectBuilding(h.oid);
+    case 'booth': bOpen.add(`${h.oid}:${h.f.id}`); return selectBuilding(h.oid);
+    case 'entrance': selectBuilding(h.oid); return fly(h.en.at, 18);
+    case 'transit': return fly(h.t.at, 18);
+    default: return fly(h.p.at);
+  }
+}
+
+function clearSearch() {
+  $('#gSearch').value = '';
+  $('#panel').classList.remove('searching');
+  $('#gResults').hidden = true;
+}
+
+$('#gSearch').oninput = (e) => renderResults(e.target.value);
+$('#gSearch').onkeydown = (e) => {
+  if (e.key === 'Escape') { clearSearch(); e.target.blur(); }
+  if (e.key === 'Enter') {
+    const first = $('#gResults .gres');
+    if (first) first.click();
+  }
+};
 
 /* ---------------------------------------------------------------- chrome */
 

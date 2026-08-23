@@ -22,6 +22,12 @@
     <button id="collapse" class="icon" title="Hide panel">‹</button>
   </header>
 
+  <div class="gsearch">
+    <input id="gSearch" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search routes, shops, floors, booths…" aria-label="Search everything" />
+  </div>
+  <div class="gresults" id="gResults" hidden></div>
+
   <div class="tabsrow">
     <div class="tabs">
       <button data-tab="routes" class="on">Routes</button>
@@ -49,6 +55,7 @@
 
   <p class="warn" id="warn" hidden></p>
   <div class="routeexit" id="routeExit" hidden></div>
+  <div class="mehint" id="meHint" hidden></div>
 
   <ol class="stops" id="stops"></ol>
   <p class="empty" id="empty"></p>
@@ -62,16 +69,16 @@
   </section>
 
   <section class="tab" data-tab="buildings" hidden>
-    <div class="bsearch">
-      <input id="bSearch" type="search" placeholder="What are you after? e.g. connectors, 线材"
-             autocomplete="off" aria-label="Search what's sold where" />
-    </div>
     <div id="bBody" class="bbody"></div>
     <footer class="foot bfoot">
       <span id="bHint" class="bhint"></span>
     </footer>
   </section>
 </aside>
+
+<button id="locate" class="locate" title="Show where I am" aria-label="Show where I am">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0-6v3m0 14v3M2 12h3m14 0h3" /><circle cx="12" cy="12" r="9" /></svg>
+</button>
 
 <button id="reveal" class="reveal" hidden>›</button>
 

@@ -60,6 +60,28 @@ opening a building directory raises it, because that's for reading. Map fitting 
 sheet height, so nothing gets framed underneath it, and the zoom and scale controls ride above
 it.
 
+## Finding things, and finding yourself
+
+**One search box** sits above the tabs and covers everything at once: your routes and their
+stops, building directories down to individual floors and booths, the entrances you placed,
+metro stations and exits, and every named thing OpenStreetMap knows about — including the
+names you gave things yourself. It matches either script, so `connector` and `线材` both work,
+and results are grouped in a fixed order (routes, stops, buildings, floors, booths, ways in,
+metro, places) so they don't reshuffle as you type. Enter opens the first hit.
+
+Clicking a result does the right thing per type: a route selects it, a stop selects its route
+and flies there, a floor or booth opens that building with the floor already expanded, a place
+or exit just flies to it.
+
+**The locate button** on the right of the map shows where you are. While it's on, the panel
+shows the nearest stop on the current route and how far it is — measured on the walking graph,
+so it agrees with the route's own distances rather than being a straight line. Accuracy is
+reported next to it (`±25 m`), which matters in Huaqiangbei where GPS is poor between the
+towers.
+
+It deliberately doesn't invent a notion of progress through a route. It answers "which stop am
+I nearest, and how far", which is the question you actually have standing in the street.
+
 ## Language
 
 The **中 / EN** button in the header switches every label on the map — buildings, places
