@@ -137,5 +137,44 @@
         "booths": []
       }
     ]
+  },
+  "way/99498037": {
+    "floors": [
+      {
+        "id": "369c869e",
+        "level": "1F",
+        "en": "Components — IC, connectors, parts",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "e549ba5f",
+        "level": "2F",
+        "en": "Components — IC, connectors, parts",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "240da323",
+        "level": "",
+        "en": "CPU, RAM, HDD, motherboards, GPUs, PC assembly & peripherals",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "3a7092e6",
+        "level": "4F",
+        "en": "CPU, RAM, HDD, motherboards, GPUs, PC assembly & peripherals, IC's, Display Panels",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "671c7be7",
+        "level": "5F",
+        "en": "Components — IC, storage, PC accessories",
+        "zh": "",
+        "booths": []
+      }
+    ]
   }
 }
