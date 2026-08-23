@@ -3,7 +3,7 @@
     "en": "SEG Tower"
   },
   "node/1694252796": {
-    "hidden": true
+    "en": "Huaqiang Electronics World Building 2"
   },
   "node/6233761893": {
     "hidden": true
@@ -30,7 +30,7 @@
     "en": "Black Ark"
   },
   "way/99498037": {
-    "en": "Huaqiang Buildings"
+    "en": "Huaqiang Electronics World Building 3"
   },
   "node/5517955823": {
     "hidden": true
@@ -51,12 +51,18 @@
     "en": "International Security Electronic City"
   },
   "way/488896095": {
-    "en": "Huaqign Electronic World and HQ LED  Building"
+    "en": "Huaqiang LED  Building"
   },
   "way/492615862": {
     "en": "Entrance to Loto food mall"
   },
   "way/616357300": {
     "en": "Duhui Electronic City"
+  },
+  "way/351753122": {
+    "en": "Rainbow Mall"
+  },
+  "way/476254578": {
+    "en": "Huaqiang Electronics World Building 1"
   }
 }
