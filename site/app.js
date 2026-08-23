@@ -210,10 +210,82 @@ map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom
 map.addControl(new maplibregl.GeolocateControl({ trackUserLocation: true }), 'bottom-right');
 map.addControl(new maplibregl.ScaleControl({ maxWidth: 90, unit: 'metric' }), 'bottom-right');
 
+/* ---------------------------------------------------------------- sheet
+
+   On a phone the panel is a bottom sheet with three heights. Anything that flies
+   the map also drops it to peek, so tapping a stop actually shows you the stop. */
+
+const isPhone = () => innerWidth <= 820;
+const SHEET = { peek: 200, half: 0.55, full: 0.88 };
+let sheetPos = 'half';
+
+const sheetPx = (pos) => {
+  const v = SHEET[pos];
+  return Math.round(v <= 1 ? innerHeight * v : v);
+};
+
+function setSheet(pos, { animate = true } = {}) {
+  sheetPos = pos;
+  const panel = $('#panel');
+  if (!animate) panel.classList.add('dragging');
+  document.documentElement.style.setProperty('--sheet-h', `${sheetPx(pos)}px`);
+  if (!animate) requestAnimationFrame(() => panel.classList.remove('dragging'));
+}
+
+// Show the map after an action that moved it...
+const revealMap = () => { if (isPhone() && sheetPos !== 'peek') setSheet('peek'); };
+// ...but reading a directory needs the sheet up, not down.
+const raiseSheet = () => { if (isPhone() && sheetPos === 'peek') setSheet('half'); };
+
+function initSheet() {
+  const panel = $('#panel');
+  const grabber = $('#grabber');
+  setSheet(isPhone() ? 'half' : 'half', { animate: false });
+
+  let start = null;
+  const order = ['peek', 'half', 'full'];
+
+  grabber.addEventListener('pointerdown', (e) => {
+    if (!isPhone()) return;
+    grabber.setPointerCapture(e.pointerId);
+    start = { y: e.clientY, h: panel.getBoundingClientRect().height, moved: false };
+    panel.classList.add('dragging');
+  });
+  grabber.addEventListener('pointermove', (e) => {
+    if (!start) return;
+    const h = Math.min(innerHeight * 0.92, Math.max(90, start.h + (start.y - e.clientY)));
+    if (Math.abs(e.clientY - start.y) > 4) start.moved = true;
+    document.documentElement.style.setProperty('--sheet-h', `${Math.round(h)}px`);
+  });
+  const end = () => {
+    if (!start) return;
+    const h = panel.getBoundingClientRect().height;
+    panel.classList.remove('dragging');
+    if (!start.moved) {
+      // A tap cycles through the heights, for anyone who doesn't think to drag.
+      setSheet(order[(order.indexOf(sheetPos) + 1) % order.length]);
+    } else {
+      // Snap to whichever height it was left nearest.
+      let best = 'half', bd = Infinity;
+      for (const pos of order) {
+        const d = Math.abs(sheetPx(pos) - h);
+        if (d < bd) { bd = d; best = pos; }
+      }
+      setSheet(best);
+    }
+    start = null;
+  };
+  grabber.addEventListener('pointerup', end);
+  grabber.addEventListener('pointercancel', end);
+
+  addEventListener('resize', () => setSheet(sheetPos, { animate: false }));
+}
+
 // The commercial spine, framed clear of the panel rather than hidden behind it.
 const CORE = [[114.0785, 22.5408], [114.0866, 22.5496]];
-const panelPad = () => (innerWidth > 820 ? { top: 60, bottom: 100, left: 372, right: 60 }
-                                         : { top: 60, bottom: 120, left: 30, right: 30 });
+const panelPad = () => (isPhone()
+  ? { top: 70, bottom: Math.min(sheetPx(sheetPos), innerHeight * 0.6) + 24, left: 24, right: 24 }
+  : { top: 60, bottom: 100, left: 372, right: 60 });
 // resize() first: on a cold load the container can still be settling, and fitting
 // against a stale size lands a whole zoom level short.
 const fitCore = () => { map.resize(); map.fitBounds(CORE, { padding: panelPad(), duration: 0 }); };
@@ -679,7 +751,7 @@ function renderStops() {
       li.querySelector('.x').onclick = () => { r.stops.splice(i, 1); if (r.stops[i]) r.stops[i].via = []; commit(); };
 
       const badge = li.querySelector('.n');
-      badge.onclick = () => map.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.getZoom(), 17) });
+      badge.onclick = () => { revealMap(); map.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.getZoom(), 17) }); };
       badge.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(i)); li.classList.add('drag'); });
       badge.addEventListener('dragend', () => li.classList.remove('drag'));
       li.addEventListener('dragover', (e) => { e.preventDefault(); li.classList.add('over'); });
@@ -709,7 +781,7 @@ function renderStops() {
           ${Number(s.mins) ? `<div class="mins">${Number(s.mins)} min</div>` : ''}
           <span class="legdist">${legTxt}</span>
         </div>`;
-      li.querySelector('.n').onclick = () => map.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.getZoom(), 17) });
+      li.querySelector('.n').onclick = () => { revealMap(); map.flyTo({ center: [s.lng, s.lat], zoom: Math.max(map.getZoom(), 17) }); };
       el.append(li);
     }
   });
@@ -1173,6 +1245,7 @@ function showTab(name) {
 
 function selectBuilding(oid) {
   bSelected = oid;
+  raiseSheet();
   showTab('buildings');
   renderBuildings();
   const at = featureIdx.get(oid)?.at;
@@ -1425,8 +1498,10 @@ function entranceRow(oid, en) {
       </div>
       <div class="fmeta"><button class="goto" title="Show on map">◎</button></div>`;
   }
-  row.querySelector('.goto').onclick = () =>
+  row.querySelector('.goto').onclick = () => {
+    revealMap();
     map.flyTo({ center: en.at, zoom: Math.max(map.getZoom(), 18) });
+  };
   return row;
 }
 
@@ -1460,7 +1535,11 @@ $('#delRoute').onclick = () => {
   renderRouteBar();
   commit();
 };
-$('#collapse').onclick = () => { $('#panel').classList.add('hide'); $('#reveal').hidden = false; };
+$('#collapse').onclick = () => {
+  if (isPhone()) return setSheet(sheetPos === 'peek' ? 'half' : 'peek');
+  $('#panel').classList.add('hide');
+  $('#reveal').hidden = false;
+};
 $('#reveal').onclick = () => { $('#panel').classList.remove('hide'); $('#reveal').hidden = true; };
 $('#publish').onclick = publish;
 
@@ -1552,6 +1631,8 @@ $('#auth').addEventListener('close', async () => {
 });
 
 /* ---------------------------------------------------------------- boot */
+
+initSheet();
 
 map.on('load', async () => {
   try {

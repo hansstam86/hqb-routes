@@ -46,6 +46,20 @@ stays honest; you've only told the router which way to go.
 Reordering stops clears the via points on the affected route, since a hand-drawn detour
 between two stops means nothing once their order changes.
 
+## On a phone
+
+The panel becomes a **bottom sheet** you drag between three heights: a peek that leaves the
+map ~75% of the screen, a half view showing the map and the stop list together, and full.
+Drag the handle, or tap it to cycle.
+
+This matters because Huaqiangbei is a walking-around activity. The panel used to cover 83% of
+the map on a 375px screen, so you could have the list or the map but never both.
+
+Tapping a stop or an entrance drops the sheet to peek so you can actually see what you tapped;
+opening a building directory raises it, because that's for reading. Map fitting follows the
+sheet height, so nothing gets framed underneath it, and the zoom and scale controls ride above
+it.
+
 ## Language
 
 The **中 / EN** button in the header switches every label on the map — buildings, places

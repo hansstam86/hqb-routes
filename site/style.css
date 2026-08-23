@@ -143,11 +143,7 @@ html, body {
 .toast.go { opacity: 1; transform: none; }
 .maplibregl-ctrl-attrib { font-size: 10px; }
 
-@media (max-width: 820px) {
-  :root { --panel-w: calc(100vw - 24px); }
-  .panel { bottom: 76px; }
-  .toolbar { right: 12px; }
-}
+
 
 /* ---------- view vs build ---------- */
 .build-only { display: none !important; }
@@ -353,3 +349,51 @@ body.can-build .tool#renameMode { display: inline-block !important; }
 }
 .entrance .goto:hover { color: #3f4a5a; }
 .entrance .x:hover { color: var(--accent); }
+
+
+/* ---------- mobile: bottom sheet ----------
+   On a phone the old panel covered 83% of the map, so you could have the list or
+   the map but never both. It becomes a sheet you drag between three heights. */
+.grabber { display: none; }
+
+@media (max-width: 820px) {
+  :root { --sheet-h: 55vh; }
+
+  .panel {
+    top: auto; left: 0; right: 0; bottom: 0; width: auto;
+    height: var(--sheet-h);
+    border-radius: 18px 18px 0 0;
+    border-left: 0; border-right: 0; border-bottom: 0;
+    box-shadow: 0 -2px 10px rgba(20,22,26,.08), 0 -12px 40px rgba(20,22,26,.14);
+    transition: height .26s cubic-bezier(.2,.8,.2,1);
+  }
+  .panel.dragging { transition: none; }
+  /* the desktop slide-away doesn't apply; the sheet just goes to its peek height */
+  .panel.hide { transform: none; opacity: 1; pointer-events: auto; }
+
+  .grabber {
+    display: block; width: 100%; padding: 9px 0 5px; border: 0; background: none;
+    cursor: grab; touch-action: none; flex: none;
+  }
+  .grabber span {
+    display: block; width: 40px; height: 4px; margin: 0 auto;
+    border-radius: 3px; background: #d4d0c8;
+  }
+  .panel.dragging .grabber { cursor: grabbing; }
+
+  .head { padding-top: 4px; }
+  .brand span { display: none; }
+  .tools-hint { display: none; }
+  .tools button span { display: none; }
+
+  .toolbar { left: 12px; right: 12px; bottom: calc(var(--sheet-h) + 10px); transition: bottom .26s cubic-bezier(.2,.8,.2,1); }
+  .panel.dragging ~ .toolbar { transition: none; }
+  .reveal { display: none; }
+
+  /* keep the map's own controls clear of the sheet */
+  .maplibregl-ctrl-bottom-right { bottom: calc(var(--sheet-h) + 8px) !important; transition: bottom .26s cubic-bezier(.2,.8,.2,1); }
+  .maplibregl-ctrl-bottom-left { bottom: calc(var(--sheet-h) + 8px) !important; }
+
+  .stats { grid-template-columns: repeat(3, 1fr); }
+  .foot { padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+}
