@@ -77,5 +77,65 @@
         "booths": []
       }
     ]
+  },
+  "node/1694252796": {
+    "floors": [
+      {
+        "id": "baf8bfc5",
+        "level": "1F",
+        "en": "Consumer electronics, Components",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "ccc5c845",
+        "level": "2F",
+        "en": "Components — IC, parts, storage, connectors",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "f52a6d27",
+        "level": "",
+        "en": "PC assembly, office/printing, repair, components",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "0c80942a",
+        "level": "4F",
+        "en": "PC assembly, office/printing, repair, components, second hand laptops",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "4ec1d9dc",
+        "level": "5F",
+        "en": "Components — IC, parts, connectors, storage",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "d35a1f17",
+        "level": "6F",
+        "en": "Components + Market Admin Office + payment counter — IC, connectors, CPU, RAM, PC accessories",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "62fce32c",
+        "level": "7F",
+        "en": "Components — IC, connectors, CPU, RAM, PC accessories",
+        "zh": "",
+        "booths": []
+      },
+      {
+        "id": "1820026d",
+        "level": "8F",
+        "en": "hqew group self-operated warehouse (华强电子网集团自营仓) + Shenzhen Qinjin Electronics",
+        "zh": "",
+        "booths": []
+      }
+    ]
   }
 }
