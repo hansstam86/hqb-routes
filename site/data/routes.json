@@ -260,7 +260,88 @@
   {
     "id": "c003cb3d-23f0-4562-aef6-0046fa2ed462",
     "name": "AI Future Life",
-    "color": "#7c3aed",
-    "stops": []
+    "color": "#b45309",
+    "stops": [
+      {
+        "id": "d7bd8ba1-9d8f-4c57-98f7-606d82cfb5a7",
+        "name": "JD Mall",
+        "zh": "",
+        "note": "",
+        "mins": 10,
+        "lng": 114.082045,
+        "lat": 22.550908,
+        "via": []
+      },
+      {
+        "id": "9314a507-6263-4734-a11f-c8864589b3e5",
+        "name": "Sundan",
+        "zh": "顺电",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081206,
+        "lat": 22.550266,
+        "via": []
+      },
+      {
+        "id": "565c2a93-c9d7-4d73-a64a-ffca0cf74107",
+        "name": "Yuanwang AI/ Life Experience Mall",
+        "zh": "华强北路",
+        "note": "",
+        "mins": 10,
+        "lng": 114.08163,
+        "lat": 22.548478,
+        "via": []
+      },
+      {
+        "id": "f509bdff-9f20-4dc2-8329-27d2205478ed",
+        "name": "AI Application Center",
+        "zh": "华强北路",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081641,
+        "lat": 22.547417,
+        "via": []
+      },
+      {
+        "id": "b553afd5-208f-4793-afed-327f14edc69d",
+        "name": "Huaqiang LED  Building",
+        "zh": "华强广场",
+        "note": "",
+        "mins": 10,
+        "lng": 114.081072,
+        "lat": 22.545664,
+        "via": []
+      },
+      {
+        "id": "46e3c4bf-877b-4f90-957f-faaefa3a6380",
+        "name": "SEG Tower",
+        "zh": "赛格电子市场",
+        "note": "",
+        "mins": 10,
+        "lng": 114.082317,
+        "lat": 22.543934,
+        "via": []
+      },
+      {
+        "id": "28a354ce-75ae-4c17-82d9-557e23f4eef2",
+        "name": "Low Altitude Experience Center ",
+        "zh": "",
+        "note": "",
+        "mins": 10,
+        "lng": 114.082832,
+        "lat": 22.543984,
+        "via": []
+      },
+      {
+        "id": "7ebd8b3b-9005-4cb7-bca4-5a2bc312289c",
+        "name": "Ganquan Road Near-zero Carbon Park",
+        "zh": "甘泉路",
+        "note": "",
+        "mins": 10,
+        "lng": 114.088875,
+        "lat": 22.547799,
+        "via": []
+      }
+    ]
   }
 ]
